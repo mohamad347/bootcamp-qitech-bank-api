@@ -1,7 +1,7 @@
 from os import environ
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, make_url
 from sqlalchemy.exc import OperationalError
 
 
@@ -19,44 +19,32 @@ DEFAULT_DATABASE_URL = "postgresql+psycopg2://bootcamp:bootcamp@localhost:5432/b
 
 DATABASE_OFFLINE = (
     "Não consegui falar com o banco em {host}:{port}.\n"
-    "Ele precisa estar de pé pros testes rodarem. Suba com:  docker compose up\n"
-    "Se ele já está de pé, confira a porta na DATABASE_URL do seu .env."
+    "Suba o banco de teste com: docker compose -f compose.test.yml up -d --wait\n"
+    "Confira a porta configurada em TEST_DATABASE_URL."
 )
 
 
 class DbUtils:
-    """Apaga o banco inteiro e o recria do zero — quando alguém chama.
-
-    Não existe limpeza automática neste projeto. O `rollback()` roda no
-    teste que o chamar, na linha em que for chamado, e em mais lugar
-    nenhum. Todos os testes dividem o mesmo banco, e cada um enxerga o
-    que os anteriores deixaram pra trás.
-
-    O nome engana um pouco: isto não desfaz uma transação. Ele derruba
-    o schema `public` com tudo que estiver dentro e roda o
-    `database/database.sql` de novo — tabelas vazias e os quatro status
-    do INSERT de volta.
-
-    Quando o seu teste precisa chamar: sempre que alguma asserção
-    depender de QUANTAS linhas existem no banco — contar, listar,
-    paginar, filtrar. Nesses casos `DbUtils.rollback()` é a primeira
-    linha do teste, antes de criar qualquer coisa (o exemplo está em
-    `tests/integration/test_sample_entities.py`). Um teste que só olha
-    as entidades que ele mesmo criou, pela chave que recebeu de volta,
-    não precisa de limpeza nenhuma — e fica mais rápido sem ela.
-
-    A limpeza acontece pela mesma conexão que a aplicação usa (a
-    DATABASE_URL), e não por um programa externo: quem tem Docker
-    rodando já tem tudo que precisa.
-    """
+    """Ferramentas de banco usadas pelos testes de integração."""
 
     @staticmethod
     def database_url() -> str:
+        """Devolve a URL usada pela API e pelos testes HTTP do exemplo."""
         return environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
 
     @staticmethod
-    def rollback() -> None:
-        engine = create_engine(DbUtils.database_url(), isolation_level="AUTOCOMMIT")
+    def reset_schema(database_url: str) -> None:
+        """Apaga `public` e instala o ERD apenas em um banco descartável *_test.
+
+        A URL é explícita porque o reset não pode escolher o banco da API.
+        Isto não é rollback transacional: todas as tabelas desse schema
+        são removidas antes de executar `database/database.sql`.
+        """
+        database_name = make_url(database_url).database
+        if not database_name or not database_name.endswith("_test"):
+            raise ValueError("reset_schema exige um banco cujo nome termina em _test")
+
+        engine = create_engine(database_url, isolation_level="AUTOCOMMIT")
 
         try:
             with engine.connect() as connection:

@@ -33,9 +33,9 @@ def create_app() -> FastAPI:
     # existem. Pra ver o que cada rota responde, mande uma requisição —
     # tem exemplo pronto de cada uma no README.
     application = FastAPI(
-        docs_url=None,
-        redoc_url=None,
-        openapi_url=None,
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
     )
 
     # ────────────────────────────────────────────────────────────────
