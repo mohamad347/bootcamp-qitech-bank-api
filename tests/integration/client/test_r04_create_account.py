@@ -298,3 +298,99 @@ def test_create_account_for_active_company_returns_public_contract(
     )
 
     _assert_created_account_response(account_response, client_key)
+
+
+def test_create_account_persists_account_and_initial_status_event(
+    api_database_engine: Engine,
+) -> None:
+    email = f"r04.persistence.{uuid4()}@example.com"
+    client_response = ClientRequisition.send(
+        "POST",
+        "/client",
+        payload={
+            "client_type": "INDIVIDUAL",
+            "email": email,
+            "cpf": RandomGenerator.generate_cpf(),
+            "full_name": "Cliente R04 Persistencia",
+            "birth_date": "1990-05-17",
+            "timezone": "America/Sao_Paulo",
+        },
+        headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+    )
+    assert client_response.response_status == 201
+
+    client_key = client_response.response_json["client_key"]
+    _prepare_client_as_active(
+        api_database_engine,
+        client_key,
+        email,
+        expected_client_type="INDIVIDUAL",
+    )
+
+    account_response = ClientRequisition.send(
+        "POST",
+        f"/client/{client_key}/account",
+        headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+    )
+    _assert_created_account_response(account_response, client_key)
+    account_key = account_response.response_json["account_key"]
+
+    with api_database_engine.connect() as connection:
+        connection.exec_driver_sql("SET TRANSACTION READ ONLY")
+        accounts = connection.execute(
+            text(
+                """
+                SELECT account.id, account.account_key::text AS account_key,
+                       client.client_key::text AS client_key,
+                       account.balance_cents,
+                       status.enumerator AS status,
+                       account.created_at, account.updated_at
+                FROM account
+                JOIN client ON client.id = account.client_id
+                JOIN account_status AS status ON status.id = account.status_id
+                WHERE client.client_key = CAST(:client_key AS uuid)
+                """
+            ),
+            {"client_key": client_key},
+        ).mappings().all()
+
+        assert len(accounts) == 1
+        account = accounts[0]
+        assert account["account_key"] == account_key
+        assert account["client_key"] == client_key
+        assert account["status"] == "ACTIVE"
+        assert type(account["balance_cents"]) is int
+        assert account["balance_cents"] == 0
+        for timestamp_name in ("created_at", "updated_at"):
+            timestamp = account[timestamp_name]
+            assert isinstance(timestamp, datetime)
+            assert timestamp.tzinfo is not None
+            assert timestamp.utcoffset() == timezone.utc.utcoffset(timestamp)
+
+        events = connection.execute(
+            text(
+                """
+                SELECT event.account_id, event.from_status_id,
+                       destination.enumerator AS to_status,
+                       event.actor_type, event.reason, event.created_at
+                FROM account_status_event AS event
+                JOIN account_status AS destination
+                  ON destination.id = event.to_status_id
+                WHERE event.account_id = :account_id
+                """
+            ),
+            {"account_id": account["id"]},
+        ).mappings().all()
+
+    assert len(events) == 1
+    event = events[0]
+    assert event["account_id"] == account["id"]
+    assert event["from_status_id"] is None
+    assert event["to_status"] == "ACTIVE"
+    assert event["actor_type"] == "SYSTEM"
+    assert event["reason"] is None
+    assert isinstance(event["created_at"], datetime)
+    assert event["created_at"].tzinfo is not None
+    assert event["created_at"].utcoffset() == timezone.utc.utcoffset(
+        event["created_at"]
+    )
