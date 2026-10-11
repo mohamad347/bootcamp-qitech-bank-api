@@ -108,7 +108,7 @@ As rotas de negócio usarão `INTERNAL-TOKEN`. Consulte [Rotas v1.1](docs/Rotas_
 | `database/database.sql` | Bootstrap físico do banco v1.1. |
 | `src/` | API FastAPI; a infraestrutura básica existe, e as features bancárias serão adicionadas por fluxo. |
 | `tests/integration/database/` | Testes diretos do schema PostgreSQL. |
-| `tests/integration/client/` | Testes HTTP da R01 e verificação separada de sua persistência. |
+| `tests/integration/client/` | Testes HTTP e de persistência da R01; cenários da R03 organizados por comportamento em `r03/`. |
 | `tests/integration/test_healthcheck.py` | Testes HTTP da API básica. |
 | `docker-compose.yml` | API e banco de desenvolvimento. |
 | `compose.test.yml` | PostgreSQL isolado para testes de schema. |

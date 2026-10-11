@@ -33,15 +33,15 @@ exemplo funcionem com o banco bancário.
 | `src/middlewares/` | Contexto de requisição, log, token interno e ciclo de vida da sessão. |
 | `src/resources/` | Entrada e saída HTTP; contém health check, rotas do exemplo e `POST /client`. |
 | `src/schemas/` | JSON Schemas de entrada do exemplo e da R01. |
-| `src/controllers/` | Regras e coordenação das operações do exemplo e da R01 PF/PJ. |
-| `src/repositories/` | Consultas e escritas no banco do exemplo e da R01. |
+| `src/controllers/` | Regras e coordenação das operações do exemplo, da R01 PF/PJ e da análise R03. |
+| `src/repositories/` | Consultas e escritas no banco do exemplo, da R01 e da R03. |
 | `src/models/` | Mapeamentos do exemplo e dos clientes PF/PJ da R01. |
-| `src/dtos/` | DTOs do exemplo; a resposta curta da R01 é montada pelo controller. |
+| `src/dtos/` | DTOs do exemplo e da R03; a resposta curta da R01 é montada pelo controller. |
 | `src/errors/` | Exceções e tradução de erros para respostas HTTP. |
-| `src/connectors/` | Código de integração externa herdado da estrutura inicial. |
+| `src/connectors/` | Base das integrações HTTP e Connector do Analysis Provider usado pela R03. |
 | `src/database.py` | Engine SQLAlchemy e contexto da sessão por requisição. |
 | `tests/integration/database/` | Testes do schema físico em PostgreSQL real. |
-| `tests/integration/client/` | Testes HTTP da R01 e testes separados de persistência com consultas somente de leitura ao banco da API. |
+| `tests/integration/client/` | Testes HTTP e de persistência da R01; testes da R03 separados por decisão, elegibilidade, provider e segurança transacional. |
 | `tests/integration/test_healthcheck.py` | Testes HTTP da rota de saúde. |
 | `docker-compose.yml` e `compose.test.yml` | Ambiente da API e banco separado para testes de schema. |
 
