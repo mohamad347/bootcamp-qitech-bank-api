@@ -26,3 +26,33 @@ class AccountAlreadyExists(QIException):
             description="The client already has an account.",
             translation="O cliente já possui uma conta.",
         )
+
+
+class InvalidAccountTransition(QIException):
+    code = "ACC0003"
+
+    def __init__(self, current_status: str, target_status: str) -> None:
+        super().__init__(
+            title="Invalid account status transition",
+            code=self.code,
+            http_status=409,
+            description=(
+                f"Account cannot transition from {current_status} to {target_status}."
+            ),
+            translation=(
+                f"A conta não pode mudar de {current_status} para {target_status}."
+            ),
+        )
+
+
+class AccountBalancePreventsClosure(QIException):
+    code = "ACC0004"
+
+    def __init__(self) -> None:
+        super().__init__(
+            title="Account balance prevents closure",
+            code=self.code,
+            http_status=409,
+            description="The account balance must be zero before closure.",
+            translation="O saldo da conta deve estar zerado antes do encerramento.",
+        )
