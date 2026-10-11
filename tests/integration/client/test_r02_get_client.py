@@ -45,6 +45,40 @@ def _assert_utc_timestamp(value: str) -> None:
     assert parsed_value.utcoffset() == timedelta(0)
 
 
+def _assert_error_response(response, status_code: int, error_code: str) -> None:
+    assert response.response_status == status_code
+    response_body = response.response_json
+    assert isinstance(response_body, dict)
+    assert set(response_body) == {"title", "description", "translation", "code"}
+    assert response_body["code"] == error_code
+    for field in ("title", "description", "translation"):
+        assert isinstance(response_body[field], str)
+        assert response_body[field].strip()
+
+
+@pytest.fixture(scope="module")
+def existing_individual_client_key() -> str:
+    payload = {
+        "client_type": "INDIVIDUAL",
+        "email": f"r02.auth.{uuid4()}@example.com",
+        "cpf": RandomGenerator.generate_cpf(),
+        "full_name": "Cliente R02 Autenticacao",
+        "birth_date": "2000-01-01",
+        "timezone": "America/Sao_Paulo",
+    }
+    response = ClientRequisition.send(
+        "POST",
+        "/client",
+        payload=payload,
+        headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+    )
+
+    assert response.response_status == 201
+    client_key = response.response_json["client_key"]
+    assert isinstance(UUID(client_key), UUID)
+    return client_key
+
+
 @pytest.fixture(scope="module")
 def api_database_engine() -> Iterator[Engine]:
     """Conecta ao mesmo PostgreSQL local usado pela API, nunca ao schema de teste."""
@@ -310,6 +344,71 @@ def test_get_individual_client_snapshot() -> None:
     ).isoformat()
     _assert_utc_timestamp(response_body["created_at"])
     _assert_utc_timestamp(response_body["updated_at"])
+
+
+def test_get_client_rejects_malformed_uuid() -> None:
+    response = ClientRequisition.send(
+        "GET",
+        "/client/not-a-uuid",
+        headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+    )
+
+    _assert_error_response(response, 400, "QIT000001")
+
+
+def test_get_client_returns_not_found_for_unknown_uuid() -> None:
+    client_key = str(uuid4())
+    response = ClientRequisition.send(
+        "GET",
+        f"/client/{client_key}",
+        headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+    )
+
+    _assert_error_response(response, 404, "CLI0001")
+
+
+def test_get_client_rejects_missing_internal_token(
+    existing_individual_client_key: str,
+) -> None:
+    response = ClientRequisition.send(
+        "GET",
+        f"/client/{existing_individual_client_key}",
+    )
+
+    _assert_error_response(response, 403, "QIT000002")
+
+
+def test_get_client_rejects_invalid_internal_token(
+    existing_individual_client_key: str,
+) -> None:
+    response = ClientRequisition.send(
+        "GET",
+        f"/client/{existing_individual_client_key}",
+        headers={"INTERNAL-TOKEN": f"{INTERNAL_TOKEN}-invalid"},
+    )
+
+    _assert_error_response(response, 403, "QIT000002")
+
+
+def test_get_client_checks_auth_before_unknown_client_lookup() -> None:
+    unknown_client_key = str(uuid4())
+    response = ClientRequisition.send(
+        "GET",
+        f"/client/{unknown_client_key}",
+        headers={"INTERNAL-TOKEN": "invalid-token"},
+    )
+
+    _assert_error_response(response, 403, "QIT000002")
+
+
+def test_get_client_checks_auth_before_malformed_uuid_validation() -> None:
+    response = ClientRequisition.send(
+        "GET",
+        "/client/not-a-uuid",
+        headers={"INTERNAL-TOKEN": "invalid-token"},
+    )
+
+    _assert_error_response(response, 403, "QIT000002")
 
 
 def test_get_company_client_snapshot_with_trade_name() -> None:

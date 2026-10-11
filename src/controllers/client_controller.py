@@ -1,4 +1,5 @@
 from datetime import date, datetime, timezone
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from psycopg2.errors import UniqueViolation
@@ -6,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from controllers.base_controller import BaseController
 from errors import (
+    ClientNotFound,
     DuplicateClientCPF,
     DuplicateClientCNPJ,
     DuplicateClientEmail,
@@ -141,9 +143,14 @@ class ClientController(BaseController):
     def get_by_key(self, client_key: str) -> dict:
         self.logger.debug(f"Buscando o Client de chave {client_key}")
 
-        client = self.client_repository.get_by_key(client_key)
+        try:
+            parsed_client_key = UUID(client_key)
+        except ValueError:
+            raise InvalidSchema("client_key must be a valid UUID") from None
+
+        client = self.client_repository.get_by_key(parsed_client_key)
         if client is None:
-            raise RuntimeError(f"Client {client_key} was not found")
+            raise ClientNotFound(client_key)
 
         response_data = {
             "client_key": str(client.client_key),

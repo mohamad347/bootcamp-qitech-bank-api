@@ -1,6 +1,19 @@
 from errors.base_error import QIException
 
 
+class ClientNotFound(QIException):
+    code = "CLI0001"
+
+    def __init__(self, client_key: str) -> None:
+        super().__init__(
+            title="Client not found",
+            code=self.code,
+            http_status=404,
+            description=f"Client with key {client_key} was not found.",
+            translation="O cliente informado não foi encontrado.",
+        )
+
+
 class DuplicateClientEmail(QIException):
     code = "CLI0003"
 
