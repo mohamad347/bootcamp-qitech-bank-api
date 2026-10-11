@@ -43,7 +43,7 @@ def _expect_client_analysis_approve() -> None:
     response.raise_for_status()
 
 
-def test_approve_pending_client_returns_200() -> None:
+def test_approve_pending_client_returns_200_with_active_status() -> None:
     _reset_mockserver()
 
     client_payload = {
@@ -72,3 +72,7 @@ def test_approve_pending_client_returns_200() -> None:
     )
 
     assert analysis_response.response_status == 200
+    assert analysis_response.response_json == {
+        "client_key": client_key,
+        "status": "ACTIVE",
+    }

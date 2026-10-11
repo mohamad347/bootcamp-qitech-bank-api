@@ -7,9 +7,9 @@ from controllers import ClientAnalysisController
 class ClientAnalysisResource:
     def on_post(self, client_key: str) -> JSONResponse:
         controller = ClientAnalysisController()
-        controller.analyze(client_key)
+        analysis_response = controller.analyze(client_key)
 
         return JSONResponse(
-            content={},
+            content=analysis_response,
             status_code=http_status.HTTP_200_OK,
         )

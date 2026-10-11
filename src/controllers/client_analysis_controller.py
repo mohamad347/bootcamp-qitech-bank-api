@@ -12,7 +12,7 @@ class ClientAnalysisController(BaseController):
         self.client_analysis_repository = ClientAnalysisRepository(self.context)
         self.client_analysis_connector = ClientAnalysisConnector()
 
-    def analyze(self, client_key: str) -> None:
+    def analyze(self, client_key: str) -> dict:
         analysis_data = self.client_analysis_repository.get_analysis_data(
             UUID(client_key)
         )
@@ -33,3 +33,8 @@ class ClientAnalysisController(BaseController):
 
         if provider_result.get("decision") != "APPROVE":
             raise RuntimeError("The first R03 cycle only supports APPROVE")
+
+        return {
+            "client_key": analysis_data["client_key"],
+            "status": ClientStatus.ACTIVE,
+        }
