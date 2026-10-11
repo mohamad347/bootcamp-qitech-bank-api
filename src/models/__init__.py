@@ -1,3 +1,9 @@
 from models.sample_entity_status import SampleEntityStatus
 from models.sample_entity import SampleEntity
 from models.sample_entity_status_event import SampleEntityStatusEvent
+
+from models.client_status import ClientStatus
+from models.client import Client
+from models.individual_client import IndividualClient
+from models.company_client import CompanyClient
+from models.client_status_event import ClientStatusEvent

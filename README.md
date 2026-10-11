@@ -2,7 +2,7 @@
 
 API de Banking as a Service desenvolvida no Bootcamp QI Tech 2026. O projeto atende uma plataforma parceira por implantação e modela cadastro de clientes PF/PJ, contas e movimentações em reais. A proposta é evoluir o serviço com TDD, validando cada comportamento antes de implementá-lo.
 
-**Estado atual:** o schema PostgreSQL v1.1 e seus testes de integração estão implementados. As rotas bancárias de cadastro, conta, depósito, transferência e extrato estão especificadas, mas ainda não foram implementadas na API.
+**Estado atual:** o schema PostgreSQL v1.1 e seus testes de integração estão implementados. A R01 `POST /client` cadastra pessoas físicas e jurídicas, com validações, conflitos, persistência e rollback cobertos por testes. As demais rotas bancárias continuam em desenvolvimento.
 
 ## Escopo do produto
 
@@ -17,7 +17,7 @@ O D0 opera no Brasil, em BRL, com uma plataforma parceira por implantação. PIX
 | Banco | `database/database.sql` cria as dez tabelas do [ERD v1.1](docs/ERD_v1_1_FINAL_BaaS_QITech.md), com status iniciais, chaves, constraints e índices aprovados. |
 | Testes do banco | A suíte em `tests/integration/database/` verifica a estrutura e as restrições em PostgreSQL real, usando um banco descartável separado. |
 | API básica | `GET /health_check` responde `204` sem token. A aplicação também possui rota raiz, middlewares e tratamento de erros. |
-| Rotas bancárias R01–R09 | Contratos definidos; implementação ainda pendente. |
+| Rotas bancárias R01–R09 | R01 implementada para PF/PJ; R02–R09 pendentes. |
 
 As dez tabelas se dividem em:
 
@@ -78,7 +78,9 @@ $env:SERVER_LOCALHOST = "127.0.0.1"
 .\.venv\Scripts\python.exe -m pytest tests/integration/test_healthcheck.py -q
 ```
 
-Com a API **e** o banco de teste ativos e `TEST_DATABASE_URL` definido, `.\.venv\Scripts\python.exe -m pytest -q` executa a suíte inteira. Atualmente são 58 cenários de schema e 6 da API básica. O [guia dos testes de schema](docs/Testes_do_Schema_v1_1.md) explica a cobertura e como acrescentar novos cenários.
+Com a API **e** o banco de teste ativos e `TEST_DATABASE_URL` definido, `.\.venv\Scripts\python.exe -m pytest -q` executa a suíte inteira, incluindo os testes da R01. O [guia dos testes de schema](docs/Testes_do_Schema_v1_1.md) explica a cobertura e como acrescentar novos cenários.
+
+Os testes de persistência da R01 fazem POST na API e consultam, somente para leitura, o banco principal `bootcamp` por `DATABASE_URL` (padrão local: `localhost:5432`). Eles não usam `bootcamp_test` nem desfazem os commits da API; os dados de cada execução são únicos.
 
 Para parar somente o banco de teste:
 
@@ -88,7 +90,7 @@ docker compose -f compose.test.yml stop db_test
 
 ## Contratos da API
 
-As rotas abaixo formam o contrato v1.1 do produto. **Somente R10 está disponível neste momento**; as demais indicam o trabalho previsto, não endpoints já utilizáveis.
+As rotas abaixo formam o contrato v1.1 do produto. **R01 e R10 estão disponíveis neste momento**; R02–R09 indicam trabalho previsto, não endpoints já utilizáveis.
 
 | Grupo | Rotas do contrato |
 | --- | --- |
@@ -106,6 +108,7 @@ As rotas de negócio usarão `INTERNAL-TOKEN`. Consulte [Rotas v1.1](docs/Rotas_
 | `database/database.sql` | Bootstrap físico do banco v1.1. |
 | `src/` | API FastAPI; a infraestrutura básica existe, e as features bancárias serão adicionadas por fluxo. |
 | `tests/integration/database/` | Testes diretos do schema PostgreSQL. |
+| `tests/integration/client/` | Testes HTTP da R01 e verificação separada de sua persistência. |
 | `tests/integration/test_healthcheck.py` | Testes HTTP da API básica. |
 | `docker-compose.yml` | API e banco de desenvolvimento. |
 | `compose.test.yml` | PostgreSQL isolado para testes de schema. |
