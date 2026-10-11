@@ -6,3 +6,5 @@
 pytest==7.4.4
 pytest-cov==4.1.0
 python-dotenv==1.0.1
+# ZoneInfo precisa dos dados IANA no Windows para os testes de idade civil.
+tzdata==2026.5

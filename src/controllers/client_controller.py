@@ -2,6 +2,12 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from controllers.base_controller import BaseController
+from errors import (
+    InvalidClientCPF,
+    InvalidSchema,
+    UnderageClient,
+    UnsupportedClientTimezone,
+)
 from models import ClientStatus, ClientStatusEvent
 from repositories import ClientRepository
 from utils.document_number import is_valid_cpf
@@ -40,19 +46,24 @@ class ClientController(BaseController):
         email = client_data["email"].strip().lower()
         timezone_name = client_data["timezone"]
         full_name = client_data["full_name"].strip()
-        cpf = self._only_digits(client_data["cpf"])
-        birth_date = date.fromisoformat(client_data["birth_date"])
+        if not full_name:
+            raise InvalidSchema("full_name must not be empty after trimming")
 
-        # Estas verificações ainda serão ligadas aos nossos erros CLI...
-        # quando criarmos os testes específicos de falha.
+        cpf = self._only_digits(client_data["cpf"])
+        try:
+            birth_date = date.fromisoformat(client_data["birth_date"])
+        except ValueError:
+            raise InvalidSchema("birth_date must be a valid calendar date") from None
+
         if timezone_name not in SUPPORTED_BRAZIL_TIMEZONES:
-            raise ValueError("Unsupported timezone")
+            raise UnsupportedClientTimezone()
 
         if not is_valid_cpf(cpf):
-            raise ValueError("Invalid CPF")
+            raise InvalidClientCPF()
 
-        if self._age_in_years(birth_date, timezone_name) < MINIMUM_AGE:
-            raise ValueError("Underage client")
+        age = self._age_in_years(birth_date, timezone_name)
+        if age < MINIMUM_AGE:
+            raise UnderageClient(age, MINIMUM_AGE)
 
         pending_status = self.client_repository.get_status(ClientStatus.PENDING)
 
