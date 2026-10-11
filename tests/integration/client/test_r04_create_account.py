@@ -3,7 +3,7 @@
 from collections.abc import Iterator
 from datetime import datetime, timezone
 from os import environ
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import create_engine, text
@@ -11,6 +11,23 @@ from sqlalchemy.engine import Engine, make_url
 
 from tests.utils import DbUtils, INTERNAL_TOKEN, RandomGenerator
 from tests.utils.requisition import ClientRequisition
+
+
+ACCOUNT_RESPONSE_FIELDS = {"account_key", "status", "balance_cents"}
+
+
+def _assert_created_account_response(response, client_key: str) -> None:
+    assert response.response_status == 201
+    assert response.response.headers["content-type"].startswith("application/json")
+
+    response_body = response.response_json
+    assert isinstance(response_body, dict)
+    assert set(response_body) == ACCOUNT_RESPONSE_FIELDS
+    assert isinstance(UUID(response_body["account_key"]), UUID)
+    assert response_body["account_key"] != client_key
+    assert response_body["status"] == "ACTIVE"
+    assert type(response_body["balance_cents"]) is int
+    assert response_body["balance_cents"] == 0
 
 
 @pytest.fixture(scope="module")
@@ -69,6 +86,7 @@ def _prepare_client_as_active(
     engine: Engine,
     client_key: str,
     expected_email: str,
+    expected_client_type: str,
 ) -> None:
     """Transiciona somente o CLIENT recém-criado e registra seu evento."""
     with engine.begin() as connection:
@@ -86,7 +104,7 @@ def _prepare_client_as_active(
         ).mappings().one()
 
         assert client["email"] == expected_email
-        assert client["client_type"] == "INDIVIDUAL"
+        assert client["client_type"] == expected_client_type
         assert client["status"] == "PENDING"
 
         initial_event = connection.execute(
@@ -226,7 +244,12 @@ def test_create_account_for_active_individual_returns_201(
     client_key = client_response.response_json["client_key"]
     assert client_response.response_json["status"] == "PENDING"
 
-    _prepare_client_as_active(api_database_engine, client_key, email)
+    _prepare_client_as_active(
+        api_database_engine,
+        client_key,
+        email,
+        expected_client_type="INDIVIDUAL",
+    )
 
     account_response = ClientRequisition.send(
         "POST",
@@ -234,4 +257,44 @@ def test_create_account_for_active_individual_returns_201(
         headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
     )
 
-    assert account_response.response_status == 201
+    _assert_created_account_response(account_response, client_key)
+
+
+def test_create_account_for_active_company_returns_public_contract(
+    api_database_engine: Engine,
+) -> None:
+    email = f"r04.company.account.{uuid4()}@example.com"
+    client_payload = {
+        "client_type": "COMPANY",
+        "email": email,
+        "cnpj": RandomGenerator.generate_cnpj(),
+        "legal_name": "Empresa R04 Teste Ltda.",
+        "trade_name": "Empresa R04",
+        "timezone": "America/Sao_Paulo",
+    }
+
+    client_response = ClientRequisition.send(
+        "POST",
+        "/client",
+        payload=client_payload,
+        headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+    )
+    assert client_response.response_status == 201
+
+    client_key = client_response.response_json["client_key"]
+    assert client_response.response_json["status"] == "PENDING"
+
+    _prepare_client_as_active(
+        api_database_engine,
+        client_key,
+        email,
+        expected_client_type="COMPANY",
+    )
+
+    account_response = ClientRequisition.send(
+        "POST",
+        f"/client/{client_key}/account",
+        headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+    )
+
+    _assert_created_account_response(account_response, client_key)
