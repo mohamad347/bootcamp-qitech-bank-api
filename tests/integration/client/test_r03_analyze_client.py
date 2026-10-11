@@ -1,7 +1,10 @@
 """Integração da R03 entre API, Analysis Provider e PostgreSQL."""
 
 import json
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from os import environ
+from threading import Barrier
 from typing import Iterator
 from uuid import uuid4
 
@@ -12,6 +15,12 @@ from sqlalchemy.engine import Engine
 from tests.utils import DbUtils, INTERNAL_TOKEN, RandomGenerator
 from tests.utils.mockserver import MockServer
 from tests.utils.requisition import BaseConnectorResponse, ClientRequisition
+
+
+ANALYSIS_PROVIDER_TIMEOUT_SECONDS = int(
+    environ.get("ANALYSIS_PROVIDER_TIMEOUT", "5")
+)
+CONCURRENT_PROVIDER_DELAY_MILLISECONDS = 1_000
 
 
 @pytest.fixture(scope="module")
@@ -54,15 +63,29 @@ def _provider_request(
 
 def _expect_provider_response(
     expected_request: dict,
-    response_body: dict,
+    response_body: dict | str,
+    status_code: int = 200,
+    delay_milliseconds: int | None = None,
 ) -> None:
+    serialized_body = (
+        json.dumps(response_body)
+        if isinstance(response_body, dict)
+        else response_body
+    )
+    http_response = {
+        "statusCode": status_code,
+        "headers": {"Content-Type": ["application/json"]},
+        "body": serialized_body,
+    }
+    if delay_milliseconds is not None:
+        http_response["delay"] = {
+            "timeUnit": "MILLISECONDS",
+            "value": delay_milliseconds,
+        }
+
     MockServer.expect(
         http_request=expected_request,
-        http_response={
-            "statusCode": 200,
-            "headers": {"Content-Type": ["application/json"]},
-            "body": json.dumps(response_body),
-        },
+        http_response=http_response,
     )
 
 
@@ -245,6 +268,90 @@ def _get_client_status(app_db_engine: Engine, client_key: str) -> str:
             """),
             {"client_key": client_key},
         ).scalar_one()
+
+
+def _get_client_lifecycle_summary(
+    app_db_engine: Engine,
+    client_key: str,
+) -> dict:
+    with app_db_engine.connect() as connection:
+        connection.exec_driver_sql("SET TRANSACTION READ ONLY")
+        lifecycle = connection.execute(
+            text("""
+                SELECT status.enumerator AS status,
+                       COUNT(event.id) AS event_count
+                FROM client AS client
+                JOIN client_status AS status ON status.id = client.status_id
+                LEFT JOIN client_status_event AS event
+                  ON event.client_id = client.id
+                WHERE client.client_key = CAST(:client_key AS uuid)
+                GROUP BY status.enumerator
+            """),
+            {"client_key": client_key},
+        ).mappings().one()
+
+    return dict(lifecycle)
+
+
+@contextmanager
+def _reject_next_status_event_for_client(
+    app_db_engine: Engine,
+    client_key: str,
+) -> Iterator[None]:
+    """Força erro no INSERT do evento e sempre remove o trigger de teste."""
+    suffix = uuid4().hex
+    function_name = f"r03_fail_event_function_{suffix}"
+    trigger_name = f"r03_fail_event_trigger_{suffix}"
+
+    with app_db_engine.begin() as connection:
+        client_id = connection.execute(
+            text("""
+                SELECT id
+                FROM client
+                WHERE client_key = CAST(:client_key AS uuid)
+            """),
+            {"client_key": client_key},
+        ).scalar_one()
+
+        connection.exec_driver_sql(f"""
+            CREATE FUNCTION {function_name}()
+            RETURNS trigger
+            LANGUAGE plpgsql
+            AS $$
+            BEGIN
+                IF NEW.client_id = {client_id}
+                   AND EXISTS (
+                       SELECT 1
+                       FROM client
+                       JOIN client_status AS status
+                         ON status.id = client.status_id
+                       WHERE client.id = NEW.client_id
+                         AND status.enumerator = 'ACTIVE'
+                   ) THEN
+                    RAISE EXCEPTION 'Falha controlada no evento da R03';
+                END IF;
+                RETURN NEW;
+            END;
+            $$
+        """)
+        connection.exec_driver_sql(f"""
+            CREATE TRIGGER {trigger_name}
+            BEFORE INSERT ON client_status_event
+            FOR EACH ROW
+            EXECUTE FUNCTION {function_name}()
+        """)
+
+    try:
+        yield
+    finally:
+        with app_db_engine.begin() as connection:
+            connection.exec_driver_sql(
+                f"DROP TRIGGER IF EXISTS {trigger_name} "
+                "ON client_status_event"
+            )
+            connection.exec_driver_sql(
+                f"DROP FUNCTION IF EXISTS {function_name}()"
+            )
 
 
 # Fluxos de sucesso e persistência
@@ -461,3 +568,163 @@ def test_unknown_client_returns_not_found_without_calling_provider() -> None:
     assert response.response_status == 404
     assert response.response_json["code"] == "CLI0001"
     _verify_provider_was_not_called()
+
+
+def test_malformed_client_key_returns_bad_request_without_calling_provider() -> None:
+    MockServer.reset()
+
+    response = _analyze_client("not-a-uuid")
+
+    assert response.response_status == 400
+    assert response.response_json["code"] == "QIT000010"
+    _verify_provider_was_not_called()
+
+
+def test_invalid_internal_token_does_not_call_provider() -> None:
+    MockServer.reset()
+
+    response = ClientRequisition.send(
+        "POST",
+        f"/client/{uuid4()}/analysis",
+        headers={"INTERNAL-TOKEN": f"{INTERNAL_TOKEN}-invalid"},
+    )
+
+    assert response.response_status == 403
+    assert response.response_json["code"] == "QIT000002"
+    _verify_provider_was_not_called()
+
+
+# Resiliência da integração externa
+
+
+@pytest.mark.parametrize(
+    ("provider_status", "provider_body"),
+    [
+        (500, {"error": "provider unavailable"}),
+        (200, "this is not valid JSON"),
+    ],
+    ids=["provider-http-500", "provider-invalid-json"],
+)
+def test_provider_failure_does_not_change_client(
+    app_db_engine: Engine,
+    provider_status: int,
+    provider_body: dict | str,
+) -> None:
+    MockServer.reset()
+    client_key, normalized_cpf = _create_pending_individual()
+    expected_provider_request = _provider_request(
+        client_key,
+        "INDIVIDUAL",
+        normalized_cpf,
+    )
+    _expect_provider_response(
+        expected_request=expected_provider_request,
+        response_body=provider_body,
+        status_code=provider_status,
+    )
+
+    response = _analyze_client(client_key)
+
+    assert response.response_status == 500
+    assert response.response_json["code"] == "QIT000500"
+    MockServer.verify_exactly(expected_provider_request, count=1)
+    _assert_client_remains_pending(app_db_engine, client_key)
+
+
+def test_provider_timeout_does_not_change_client(
+    app_db_engine: Engine,
+) -> None:
+    MockServer.reset()
+    client_key, normalized_cpf = _create_pending_individual()
+    expected_provider_request = _provider_request(
+        client_key,
+        "INDIVIDUAL",
+        normalized_cpf,
+    )
+    _expect_provider_response(
+        expected_request=expected_provider_request,
+        response_body={"decision": "APPROVE", "reason": None},
+        delay_milliseconds=(ANALYSIS_PROVIDER_TIMEOUT_SECONDS + 1) * 1_000,
+    )
+
+    response = _analyze_client(client_key)
+
+    assert response.response_status == 500
+    assert response.response_json["code"] == "QIT000500"
+    MockServer.verify_exactly(expected_provider_request, count=1)
+    _assert_client_remains_pending(app_db_engine, client_key)
+
+
+# Concorrência e atomicidade no PostgreSQL
+
+
+def test_concurrent_analysis_allows_only_one_status_transition(
+    app_db_engine: Engine,
+) -> None:
+    MockServer.reset()
+    client_key, normalized_cpf = _create_pending_individual()
+    expected_provider_request = _provider_request(
+        client_key,
+        "INDIVIDUAL",
+        normalized_cpf,
+    )
+    _expect_provider_response(
+        expected_request=expected_provider_request,
+        response_body={"decision": "APPROVE", "reason": None},
+        delay_milliseconds=CONCURRENT_PROVIDER_DELAY_MILLISECONDS,
+    )
+
+    start_gate = Barrier(3)
+
+    def send_analysis() -> BaseConnectorResponse:
+        start_gate.wait(timeout=5)
+        return _analyze_client(client_key)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(send_analysis) for _ in range(2)]
+        start_gate.wait(timeout=5)
+        responses = [future.result(timeout=15) for future in futures]
+
+    assert sorted(response.response_status for response in responses) == [200, 409]
+
+    successful_response = next(
+        response for response in responses if response.response_status == 200
+    )
+    conflict_response = next(
+        response for response in responses if response.response_status == 409
+    )
+    assert successful_response.response_json == {
+        "client_key": client_key,
+        "status": "ACTIVE",
+    }
+    assert conflict_response.response_json["code"] == "CLI0002"
+    MockServer.verify_exactly(expected_provider_request, count=2)
+    assert _get_client_lifecycle_summary(app_db_engine, client_key) == {
+        "status": "ACTIVE",
+        "event_count": 2,
+    }
+
+
+def test_event_failure_rolls_back_client_status_change(
+    app_db_engine: Engine,
+) -> None:
+    MockServer.reset()
+    client_key, normalized_cpf = _create_pending_individual()
+    expected_provider_request = _provider_request(
+        client_key,
+        "INDIVIDUAL",
+        normalized_cpf,
+    )
+    _expect_client_analysis(
+        expected_request=expected_provider_request,
+        decision="APPROVE",
+        reason=None,
+    )
+
+    with _reject_next_status_event_for_client(app_db_engine, client_key):
+        response = _analyze_client(client_key)
+
+    assert response.response_status == 500
+    assert response.response_json["code"] == "QIT000500"
+    MockServer.verify_exactly(expected_provider_request, count=1)
+    _assert_client_remains_pending(app_db_engine, client_key)

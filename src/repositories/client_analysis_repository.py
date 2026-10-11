@@ -73,6 +73,10 @@ class ClientAnalysisRepository:
         client.status_id = to_status.id
         client.updated_at = now
 
+        # Envia o UPDATE dentro da transação, sem fazer commit. Se a criação
+        # do evento falhar depois, o rollback ainda desfaz esta alteração.
+        self.session.flush()
+
         status_event = ClientStatusEvent()
         status_event.client_id = client.id
         status_event.from_status_id = from_status.id

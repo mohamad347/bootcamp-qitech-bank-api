@@ -3,7 +3,7 @@ from uuid import UUID
 from connectors import ClientAnalysisConnector
 from controllers.base_controller import BaseController
 from dtos import ClientAnalysisDTO
-from errors import ClientNotFound, InvalidClientStatus
+from errors import ClientNotFound, InvalidClientStatus, InvalidParameter
 from models import ClientStatus, ClientStatusEvent
 from repositories import ClientAnalysisRepository
 
@@ -15,7 +15,11 @@ class ClientAnalysisController(BaseController):
         self.client_analysis_connector = ClientAnalysisConnector()
 
     def analyze(self, client_key: str) -> dict:
-        parsed_client_key = UUID(client_key)
+        try:
+            parsed_client_key = UUID(client_key)
+        except ValueError:
+            raise InvalidParameter("client_key must be a valid UUID.") from None
+
         analysis_source = self.client_analysis_repository.get_analysis_source(
             parsed_client_key
         )
