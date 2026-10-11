@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy.orm import lazyload
+from sqlalchemy.orm import joinedload, lazyload
 
 from database import Context
 from models import Account, AccountStatus, AccountStatusEvent, Client
@@ -32,6 +32,15 @@ class AccountRepository:
         return (
             self.session.query(Account)
             .filter(Account.client_id == client_id)
+            .one_or_none()
+        )
+
+    def get_by_key(self, account_key: UUID) -> tuple[Account, UUID] | None:
+        return (
+            self.session.query(Account, Client.client_key)
+            .join(Client, Client.id == Account.client_id)
+            .options(joinedload(Account.status))
+            .filter(Account.account_key == account_key)
             .one_or_none()
         )
 

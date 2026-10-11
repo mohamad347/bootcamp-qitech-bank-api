@@ -5,8 +5,10 @@ from psycopg2.errors import UniqueViolation
 from sqlalchemy.exc import IntegrityError
 
 from controllers.base_controller import BaseController
+from dtos import AccountDTO
 from errors import (
     AccountAlreadyExists,
+    AccountNotFound,
     InvalidClientStatus,
     ClientNotFound,
     InternalError,
@@ -76,3 +78,18 @@ class AccountController(BaseController):
         except Exception:
             self.session.rollback()
             raise
+
+    def get_by_key(self, account_key: str) -> dict:
+        try:
+            parsed_account_key = UUID(account_key)
+        except (AttributeError, TypeError, ValueError):
+            raise InvalidSchema("account_key must be a valid UUID") from None
+
+        account_with_client_key = self.account_repository.get_by_key(
+            parsed_account_key
+        )
+        if account_with_client_key is None:
+            raise AccountNotFound(account_key)
+
+        account, client_key = account_with_client_key
+        return AccountDTO.obj_to_response(account, client_key)
