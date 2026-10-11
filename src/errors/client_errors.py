@@ -27,16 +27,29 @@ class DuplicateClientCPF(QIException):
         )
 
 
-class InvalidClientCPF(QIException):
-    code = "CLI0006"
+class DuplicateClientCNPJ(QIException):
+    code = "CLI0005"
 
     def __init__(self) -> None:
         super().__init__(
-            title="Invalid CPF",
+            title="CNPJ already registered",
+            code=self.code,
+            http_status=409,
+            description="The CNPJ is already registered.",
+            translation="O CNPJ informado já está cadastrado.",
+        )
+
+
+class InvalidClientDocument(QIException):
+    code = "CLI0006"
+
+    def __init__(self, document_type: str) -> None:
+        super().__init__(
+            title=f"Invalid {document_type}",
             code=self.code,
             http_status=400,
-            description="The CPF is invalid.",
-            translation="O CPF informado é inválido.",
+            description=f"The {document_type} is invalid.",
+            translation=f"O {document_type} informado é inválido.",
         )
 
 

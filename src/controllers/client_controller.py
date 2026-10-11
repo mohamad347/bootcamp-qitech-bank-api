@@ -7,15 +7,16 @@ from sqlalchemy.exc import IntegrityError
 from controllers.base_controller import BaseController
 from errors import (
     DuplicateClientCPF,
+    DuplicateClientCNPJ,
     DuplicateClientEmail,
-    InvalidClientCPF,
+    InvalidClientDocument,
     InvalidSchema,
     UnderageClient,
     UnsupportedClientTimezone,
 )
 from models import ClientStatus, ClientStatusEvent
 from repositories import ClientRepository
-from utils.document_number import is_valid_cpf
+from utils.document_number import is_valid_cnpj, is_valid_cpf
 
 
 MINIMUM_AGE = 18
@@ -70,15 +71,19 @@ class ClientController(BaseController):
 
         if client_type == "INDIVIDUAL":
             if not is_valid_cpf(cpf):
-                raise InvalidClientCPF()
+                raise InvalidClientDocument("CPF")
 
             age = self._age_in_years(birth_date, timezone_name)
             if age < MINIMUM_AGE:
                 raise UnderageClient(age, MINIMUM_AGE)
         else:
             cnpj = self._only_digits(client_data["cnpj"])
+            if not is_valid_cnpj(cnpj):
+                raise InvalidClientDocument("CNPJ")
             legal_name = client_data["legal_name"].strip()
-            trade_name = client_data["trade_name"].strip()
+            if not legal_name:
+                raise InvalidSchema("legal_name must not be empty after trimming")
+            trade_name = (client_data.get("trade_name") or "").strip() or None
 
         pending_status = self.client_repository.get_status(ClientStatus.PENDING)
 
@@ -127,6 +132,8 @@ class ClientController(BaseController):
                     raise DuplicateClientEmail(email) from error
                 if constraint_name == "individual_client_cpf_key":
                     raise DuplicateClientCPF() from error
+                if constraint_name == "company_client_cnpj_key":
+                    raise DuplicateClientCNPJ() from error
             raise
 
         return response_data

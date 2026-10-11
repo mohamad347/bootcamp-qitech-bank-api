@@ -20,6 +20,18 @@ def individual_payload() -> dict[str, str]:
     }
 
 
+@pytest.fixture
+def company_payload() -> dict[str, str]:
+    return {
+        "client_type": "COMPANY",
+        "email": f"r01.company.{uuid4()}@example.com",
+        "cnpj": RandomGenerator.generate_cnpj(),
+        "legal_name": "Empresa Teste Ltda",
+        "trade_name": "Empresa Teste",
+        "timezone": "America/Sao_Paulo",
+    }
+
+
 class TestCreateClient:
     @pytest.mark.parametrize("masked", [False, True], ids=["unmasked", "masked"])
     def test_create_valid_individual_client(
@@ -493,3 +505,257 @@ class TestCreateClient:
         assert response_body["status"] == "PENDING"
         assert isinstance(response_body["client_key"], str)
         assert isinstance(UUID(response_body["client_key"]), UUID)
+
+    def test_create_company_with_unmasked_cnpj(self) -> None:
+        cnpj = RandomGenerator.generate_cnpj()
+        payload = {
+            "client_type": "COMPANY",
+            "email": f"r01.company.unmasked.{uuid4()}@example.com",
+            "cnpj": cnpj.replace(".", "").replace("/", "").replace("-", ""),
+            "legal_name": "Empresa Teste Ltda",
+            "trade_name": "Empresa Teste",
+            "timezone": "America/Sao_Paulo",
+        }
+
+        response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+
+        assert response.response_status == 201
+        assert set(response.response_json) == {"client_key", "client_type", "status"}
+        assert response.response_json["client_type"] == "COMPANY"
+        assert response.response_json["status"] == "PENDING"
+        assert isinstance(UUID(response.response_json["client_key"]), UUID)
+
+    def test_rejects_cnpj_with_invalid_check_digit(
+        self, company_payload: dict[str, str]
+    ) -> None:
+        valid_cnpj = company_payload["cnpj"]
+        cnpj_digits = valid_cnpj.replace(".", "").replace("/", "").replace("-", "")
+        invalid_last_digit = (int(cnpj_digits[-1]) + 1) % 10
+        company_payload["cnpj"] = f"{cnpj_digits[:-1]}{invalid_last_digit}"
+
+        response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=company_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+
+        assert response.response_status == 400
+        assert response.response_json["code"] == "CLI0006"
+        assert {"title", "description", "translation", "code"} <= set(
+            response.response_json
+        )
+
+    def test_rejects_duplicate_company_cnpj(
+        self, company_payload: dict[str, str]
+    ) -> None:
+        masked_cnpj = company_payload["cnpj"]
+        second_payload = {
+            **company_payload,
+            "email": f"r01.company.duplicate-cnpj.{uuid4()}@example.com",
+            "cnpj": masked_cnpj.replace(".", "").replace("/", "").replace("-", ""),
+        }
+
+        first_response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=company_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+        assert first_response.response_status == 201
+
+        second_response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=second_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+
+        assert second_response.response_status == 409
+        assert second_response.response_json["code"] == "CLI0005"
+        assert {"title", "description", "translation", "code"} <= set(
+            second_response.response_json
+        )
+
+    def test_rejects_duplicate_email_between_companies(
+        self, company_payload: dict[str, str]
+    ) -> None:
+        second_cnpj = RandomGenerator.generate_cnpj()
+        while second_cnpj == company_payload["cnpj"]:
+            second_cnpj = RandomGenerator.generate_cnpj()
+        second_payload = {**company_payload, "cnpj": second_cnpj}
+
+        first_response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=company_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+        assert first_response.response_status == 201
+
+        second_response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=second_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+
+        assert second_response.response_status == 409
+        assert second_response.response_json["code"] == "CLI0003"
+        assert {"title", "description", "translation", "code"} <= set(
+            second_response.response_json
+        )
+
+    def test_rejects_duplicate_email_between_individual_and_company(
+        self,
+        individual_payload: dict[str, str],
+        company_payload: dict[str, str],
+    ) -> None:
+        company_payload["email"] = individual_payload["email"]
+
+        first_response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=individual_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+        assert first_response.response_status == 201
+
+        second_response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=company_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+
+        assert second_response.response_status == 409
+        assert second_response.response_json["code"] == "CLI0003"
+        assert {"title", "description", "translation", "code"} <= set(
+            second_response.response_json
+        )
+
+    def test_rejects_company_without_legal_name(
+        self, company_payload: dict[str, str]
+    ) -> None:
+        del company_payload["legal_name"]
+
+        response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=company_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+
+        assert response.response_status == 400
+        assert response.response_json["code"] == "QIT000001"
+        assert {"title", "description", "translation", "code"} <= set(
+            response.response_json
+        )
+
+    def test_rejects_company_legal_name_empty_after_trim(
+        self, company_payload: dict[str, str]
+    ) -> None:
+        company_payload["legal_name"] = "     "
+
+        response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=company_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+
+        assert response.response_status == 400
+        assert response.response_json["code"] == "QIT000001"
+        assert {"title", "description", "translation", "code"} <= set(
+            response.response_json
+        )
+
+    def test_create_company_without_trade_name(
+        self, company_payload: dict[str, str]
+    ) -> None:
+        del company_payload["trade_name"]
+
+        response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=company_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+
+        assert response.response_status == 201
+        assert set(response.response_json) == {"client_key", "client_type", "status"}
+        assert response.response_json["client_type"] == "COMPANY"
+        assert response.response_json["status"] == "PENDING"
+        assert isinstance(UUID(response.response_json["client_key"]), UUID)
+
+    @pytest.mark.parametrize("trade_name", ["", "     "], ids=["empty", "whitespace"])
+    def test_create_company_with_blank_trade_name(
+        self, trade_name: str, company_payload: dict[str, str]
+    ) -> None:
+        company_payload["trade_name"] = trade_name
+
+        response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=company_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+
+        assert response.response_status == 201
+        assert set(response.response_json) == {"client_key", "client_type", "status"}
+        assert response.response_json["client_type"] == "COMPANY"
+        assert response.response_json["status"] == "PENDING"
+        assert isinstance(UUID(response.response_json["client_key"]), UUID)
+
+    def test_trims_company_email_before_uniqueness_check(
+        self, company_payload: dict[str, str]
+    ) -> None:
+        second_cnpj = RandomGenerator.generate_cnpj()
+        while second_cnpj == company_payload["cnpj"]:
+            second_cnpj = RandomGenerator.generate_cnpj()
+        second_payload = {
+            **company_payload,
+            "email": f"  {company_payload['email']}  ",
+            "cnpj": second_cnpj,
+        }
+
+        first_response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=company_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+        assert first_response.response_status == 201
+
+        second_response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=second_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+
+        assert second_response.response_status == 409
+        assert second_response.response_json["code"] == "CLI0003"
+        assert {"title", "description", "translation", "code"} <= set(
+            second_response.response_json
+        )
+
+    def test_rejects_structurally_invalid_company_email(
+        self, company_payload: dict[str, str]
+    ) -> None:
+        company_payload["email"] = "email-sem-arroba"
+
+        response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=company_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+
+        assert response.response_status == 400
+        assert response.response_json["code"] == "QIT000001"

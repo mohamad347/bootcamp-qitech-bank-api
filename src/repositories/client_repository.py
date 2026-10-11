@@ -84,7 +84,7 @@ class ClientRepository:
         client: Client,
         cnpj: str,
         legal_name: str,
-        trade_name: str,
+        trade_name: str | None,
     ) -> CompanyClient:
         company_client = CompanyClient()
         company_client.client_id = client.id
