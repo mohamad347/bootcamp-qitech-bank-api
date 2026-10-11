@@ -16,3 +16,12 @@ class ClientResource:
             content=jsonable_encoder(client_response),
             status_code=http_status.HTTP_201_CREATED,
         )
+
+    def on_get_by_key(self, client_key: str) -> JSONResponse:
+        controller = ClientController()
+        client_response = controller.get_by_key(client_key)
+
+        return JSONResponse(
+            content=jsonable_encoder(client_response),
+            status_code=http_status.HTTP_200_OK,
+        )

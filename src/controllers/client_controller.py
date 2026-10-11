@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
 from psycopg2.errors import UniqueViolation
@@ -137,6 +137,42 @@ class ClientController(BaseController):
             raise
 
         return response_data
+
+    def get_by_key(self, client_key: str) -> dict:
+        self.logger.debug(f"Buscando o Client de chave {client_key}")
+
+        client = self.client_repository.get_by_key(client_key)
+        if client is None:
+            raise RuntimeError(f"Client {client_key} was not found")
+        if client.client_type != "INDIVIDUAL":
+            raise RuntimeError(
+                f"Client type {client.client_type} is not supported yet"
+            )
+
+        individual_client = self.client_repository.get_individual_by_client_id(
+            client.id
+        )
+        if individual_client is None:
+            raise RuntimeError(
+                f"Individual profile for Client {client_key} was not found"
+            )
+
+        return {
+            "client_key": str(client.client_key),
+            "client_type": client.client_type,
+            "email": client.email,
+            "timezone": client.timezone,
+            "status": client.status.enumerator,
+            "cpf": individual_client.cpf,
+            "full_name": individual_client.full_name,
+            "birth_date": individual_client.birth_date.isoformat(),
+            "created_at": self._as_utc_isoformat(client.created_at),
+            "updated_at": self._as_utc_isoformat(client.updated_at),
+        }
+
+    @staticmethod
+    def _as_utc_isoformat(value: datetime) -> str:
+        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
     @staticmethod
     def _only_digits(value: str) -> str:

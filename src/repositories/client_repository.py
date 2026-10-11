@@ -36,6 +36,22 @@ class ClientRepository:
             .first()
         )
 
+    def get_by_key(self, client_key: str) -> Client | None:
+        return (
+            self.session.query(Client)
+            .filter(Client.client_key == client_key)
+            .one_or_none()
+        )
+
+    def get_individual_by_client_id(
+        self, client_id: int
+    ) -> IndividualClient | None:
+        return (
+            self.session.query(IndividualClient)
+            .filter(IndividualClient.client_id == client_id)
+            .one_or_none()
+        )
+
     def create_client(
         self,
         client_type: str,
