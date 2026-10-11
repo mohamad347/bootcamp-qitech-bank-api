@@ -12,13 +12,25 @@ O schema PostgreSQL v1.1 está em `database/database.sql` e tem testes de
 integração em `tests/integration/database/`. A API FastAPI responde à
 rota de saúde e ainda registra endpoints `sample_entity` do exemplo do
 bootcamp. A R01 `POST /client` implementa o cadastro PF/PJ, com validações,
-conflitos, persistência e rollback cobertos por testes. As outras rotas
-bancárias continuam pendentes. Em `src/`, coexistem arquivos do exemplo e os
-models, repository, controller, schema e resource da R01; ainda não há DTO
-bancário dedicado.
+conflitos, persistência e rollback cobertos por testes, e já está integrada à
+`main`. A R02 `GET /client/{client_key}` está implementada e tecnicamente
+aprovada nesta branch, aguardando integração; as rotas R03–R09 continuam
+pendentes. Em `src/`, coexistem arquivos do exemplo e os componentes de CLIENT
+usados pela R01 e pela R02; ainda não há DTO bancário dedicado.
+
+A R02 exige `INTERNAL-TOKEN`, atende clientes `INDIVIDUAL` e `COMPANY` nos
+estados `PENDING`, `ACTIVE`, `REJECTED` e `INACTIVE` e devolve apenas o snapshot
+público, sem IDs internos, contas ou eventos. A consulta é somente leitura.
+A R02 utiliza os erros contratuais `400 QIT000001`, `403 QIT000002` e
+`404 CLI0001`. Falhas internas seguem o tratamento centralizado
+`500 QIT000500`. Seu marco de validação é **128 passed**.
 
 O [registro do primeiro refactor da R01](R01_refactor_primeiro_ciclo_TDD.md)
 resume o que mudou sem ampliar o comportamento da rota.
+
+A premissa de que a R01 ainda não estava integrada à `main`, registrada no
+plano original da R02, é histórica. O plano permanece inalterado como registro
+do contexto em que a implementação foi iniciada.
 
 O SQL principal não cria tabelas `sample_entity`. Portanto, subir a API e
 receber resposta do `/health_check` não comprova que os endpoints do
@@ -31,17 +43,17 @@ exemplo funcionem com o banco bancário.
 | `database/database.sql` | Criação das dez tabelas bancárias, seeds, chaves, restrições e índices. |
 | `src/app.py` | Montagem do FastAPI, registro dos middlewares e das rotas disponíveis. |
 | `src/middlewares/` | Contexto de requisição, log, token interno e ciclo de vida da sessão. |
-| `src/resources/` | Entrada e saída HTTP; contém health check, rotas do exemplo e `POST /client`. |
+| `src/resources/` | Entrada e saída HTTP; contém health check, rotas do exemplo, `POST /client` e `GET /client/{client_key}`. |
 | `src/schemas/` | JSON Schemas de entrada do exemplo e da R01. |
-| `src/controllers/` | Regras e coordenação das operações do exemplo e da R01 PF/PJ. |
-| `src/repositories/` | Consultas e escritas no banco do exemplo e da R01. |
-| `src/models/` | Mapeamentos do exemplo e dos clientes PF/PJ da R01. |
+| `src/controllers/` | Regras, coordenação da R01 e composição dos snapshots PF/PJ da R02. |
+| `src/repositories/` | Consultas e escritas do exemplo e da R01, além das consultas somente leitura da R02. |
+| `src/models/` | Mapeamentos do exemplo e dos clientes PF/PJ usados pela R01 e pela R02. |
 | `src/dtos/` | DTOs do exemplo; a resposta curta da R01 é montada pelo controller. |
 | `src/errors/` | Exceções e tradução de erros para respostas HTTP. |
 | `src/connectors/` | Código de integração externa herdado da estrutura inicial. |
 | `src/database.py` | Engine SQLAlchemy e contexto da sessão por requisição. |
 | `tests/integration/database/` | Testes do schema físico em PostgreSQL real. |
-| `tests/integration/client/` | Testes HTTP da R01 e testes separados de persistência com consultas somente de leitura ao banco da API. |
+| `tests/integration/client/` | Testes HTTP da R01 e da R02, além dos testes separados de persistência da R01. |
 | `tests/integration/test_healthcheck.py` | Testes HTTP da rota de saúde. |
 | `docker-compose.yml` e `compose.test.yml` | Ambiente da API e banco separado para testes de schema. |
 
@@ -65,6 +77,16 @@ repository faz a persistência e as consultas. Os modelos descrevem o
 mapeamento das tabelas, enquanto schemas e DTOs cuidam dos formatos de
 entrada e saída. Essas responsabilidades são uma orientação para as
 features novas; a implementação deve seguir o contrato de cada rota.
+
+Na R02, depois da autenticação feita pelo middleware, o caminho de leitura é:
+
+```text
+Resource → Controller → Repository → PostgreSQL
+```
+
+O resource delega a consulta, o controller valida a chave e compõe o snapshot
+da especialização, e o repository consulta o CLIENT e seu perfil. Esse fluxo
+não executa escrita, `flush` ou `commit`.
 
 ### Sessão e transação
 
