@@ -1,1 +1,2 @@
 from connectors.bankslip_connector import BankSlipConnector
+from connectors.client_analysis_connector import ClientAnalysisConnector
