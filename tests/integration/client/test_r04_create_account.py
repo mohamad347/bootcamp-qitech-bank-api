@@ -829,6 +829,26 @@ def test_create_account_persists_account_and_initial_status_event(
         expected_client_type="INDIVIDUAL",
     )
 
+    with api_database_engine.connect() as connection:
+        connection.exec_driver_sql("SET TRANSACTION READ ONLY")
+        client_before = connection.execute(
+            text(
+                """
+                SELECT client.id, client.status_id,
+                       status.enumerator AS status, client.updated_at,
+                       COUNT(event.id) AS status_event_count
+                FROM client
+                JOIN client_status AS status ON status.id = client.status_id
+                LEFT JOIN client_status_event AS event ON event.client_id = client.id
+                WHERE client.client_key = CAST(:client_key AS uuid)
+                GROUP BY client.id, client.status_id, status.enumerator, client.updated_at
+                """
+            ),
+            {"client_key": client_key},
+        ).mappings().one()
+        assert client_before["status"] == "ACTIVE"
+        assert client_before["status_event_count"] == 2
+
     account_response = ClientRequisition.send(
         "POST",
         f"/client/{client_key}/account",
@@ -869,6 +889,25 @@ def test_create_account_persists_account_and_initial_status_event(
             assert timestamp.tzinfo is not None
             assert timestamp.utcoffset() == timezone.utc.utcoffset(timestamp)
 
+        client_after = connection.execute(
+            text(
+                """
+                SELECT client.status_id, status.enumerator AS status,
+                       client.updated_at, COUNT(event.id) AS status_event_count
+                FROM client
+                JOIN client_status AS status ON status.id = client.status_id
+                LEFT JOIN client_status_event AS event ON event.client_id = client.id
+                WHERE client.id = :client_id
+                GROUP BY client.status_id, status.enumerator, client.updated_at
+                """
+            ),
+            {"client_id": client_before["id"]},
+        ).mappings().one()
+        assert client_after["status_id"] == client_before["status_id"]
+        assert client_after["status"] == client_before["status"]
+        assert client_after["updated_at"] == client_before["updated_at"]
+        assert client_after["status_event_count"] == client_before["status_event_count"]
+
         events = connection.execute(
             text(
                 """
@@ -883,6 +922,22 @@ def test_create_account_persists_account_and_initial_status_event(
             ),
             {"account_id": account["id"]},
         ).mappings().all()
+
+        financial_counts = connection.execute(
+            text(
+                """
+                SELECT COUNT(entry.id) AS entry_count,
+                       COUNT(DISTINCT transaction.id) AS transaction_count
+                FROM transaction_entry AS entry
+                LEFT JOIN financial_transaction AS transaction
+                  ON transaction.id = entry.transaction_id
+                WHERE entry.account_id = :account_id
+                """
+            ),
+            {"account_id": account["id"]},
+        ).mappings().one()
+        assert financial_counts["entry_count"] == 0
+        assert financial_counts["transaction_count"] == 0
 
     assert len(events) == 1
     event = events[0]
