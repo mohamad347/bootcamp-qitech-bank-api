@@ -2,7 +2,7 @@
 
 API de Banking as a Service desenvolvida no Bootcamp QI Tech 2026. O projeto atende uma plataforma parceira por implantação e modela cadastro de clientes PF/PJ, contas e movimentações em reais. A proposta é evoluir o serviço com TDD, validando cada comportamento antes de implementá-lo.
 
-**Estado atual:** o schema PostgreSQL v1.1 e seus testes de integração estão implementados. As rotas bancárias de cadastro, conta, depósito, transferência e extrato estão especificadas, mas ainda não foram implementadas na API.
+**Estado atual:** o schema PostgreSQL v1.1 e seus testes de integração estão implementados. A R01 `POST /client` já possui o primeiro cenário TDD: cadastro válido de pessoa física com resposta `201`. Os demais cenários da R01 e as outras rotas bancárias continuam em desenvolvimento.
 
 ## Escopo do produto
 
@@ -17,7 +17,7 @@ O D0 opera no Brasil, em BRL, com uma plataforma parceira por implantação. PIX
 | Banco | `database/database.sql` cria as dez tabelas do [ERD v1.1](docs/ERD_v1_1_FINAL_BaaS_QITech.md), com status iniciais, chaves, constraints e índices aprovados. |
 | Testes do banco | A suíte em `tests/integration/database/` verifica a estrutura e as restrições em PostgreSQL real, usando um banco descartável separado. |
 | API básica | `GET /health_check` responde `204` sem token. A aplicação também possui rota raiz, middlewares e tratamento de erros. |
-| Rotas bancárias R01–R09 | Contratos definidos; implementação ainda pendente. |
+| Rotas bancárias R01–R09 | Primeiro cenário da R01 implementado; demais comportamentos e rotas pendentes. |
 
 As dez tabelas se dividem em:
 
@@ -78,7 +78,7 @@ $env:SERVER_LOCALHOST = "127.0.0.1"
 .\.venv\Scripts\python.exe -m pytest tests/integration/test_healthcheck.py -q
 ```
 
-Com a API **e** o banco de teste ativos e `TEST_DATABASE_URL` definido, `.\.venv\Scripts\python.exe -m pytest -q` executa a suíte inteira. Atualmente são 58 cenários de schema e 6 da API básica. O [guia dos testes de schema](docs/Testes_do_Schema_v1_1.md) explica a cobertura e como acrescentar novos cenários.
+Com a API **e** o banco de teste ativos e `TEST_DATABASE_URL` definido, `.\.venv\Scripts\python.exe -m pytest -q` executa a suíte inteira, incluindo o cenário atual da R01. O [guia dos testes de schema](docs/Testes_do_Schema_v1_1.md) explica a cobertura e como acrescentar novos cenários.
 
 Para parar somente o banco de teste:
 

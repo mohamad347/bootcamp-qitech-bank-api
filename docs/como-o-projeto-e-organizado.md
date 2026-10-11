@@ -11,9 +11,14 @@ está no [ERD](ERD_v1_1_FINAL_BaaS_QITech.md), nas
 O schema PostgreSQL v1.1 está em `database/database.sql` e tem testes de
 integração em `tests/integration/database/`. A API FastAPI responde à
 rota de saúde e ainda registra endpoints `sample_entity` do exemplo do
-bootcamp. **As rotas bancárias R01–R09 ainda não estão implementadas.**
-Os modelos, repositories, controllers, schemas e DTOs existentes em `src/`
-tratam do exemplo; não representam as dez tabelas bancárias do SQL principal.
+bootcamp. A R01 `POST /client` já implementa o primeiro cenário TDD:
+cadastro válido de pessoa física com resposta `201`. Os demais cenários da
+R01 e as outras rotas bancárias continuam pendentes. Em `src/`, coexistem
+arquivos do exemplo e os primeiros models, repository, controller, schema e
+resource bancários; ainda não há DTO bancário dedicado.
+
+O [registro do primeiro refactor da R01](R01_refactor_primeiro_ciclo_TDD.md)
+resume o que mudou sem ampliar o comportamento da rota.
 
 O SQL principal não cria tabelas `sample_entity`. Portanto, subir a API e
 receber resposta do `/health_check` não comprova que os endpoints do
@@ -26,12 +31,12 @@ exemplo funcionem com o banco bancário.
 | `database/database.sql` | Criação das dez tabelas bancárias, seeds, chaves, restrições e índices. |
 | `src/app.py` | Montagem do FastAPI, registro dos middlewares e das rotas disponíveis. |
 | `src/middlewares/` | Contexto de requisição, log, token interno e ciclo de vida da sessão. |
-| `src/resources/` | Entrada e saída HTTP; hoje contém health check e rotas do exemplo. |
-| `src/schemas/` | JSON Schemas de entrada usados pelo exemplo. |
-| `src/controllers/` | Regras e coordenação das operações; os controllers de negócio bancário ainda serão criados. |
-| `src/repositories/` | Consultas e escritas no banco; atualmente contém apenas o repository do exemplo. |
-| `src/models/` | Mapeamentos SQLAlchemy existentes para o exemplo; os modelos bancários ainda serão adicionados conforme a implementação. |
-| `src/dtos/` | Montagem das respostas do exemplo; respostas bancárias ainda serão definidas no código. |
+| `src/resources/` | Entrada e saída HTTP; contém health check, rotas do exemplo e `POST /client`. |
+| `src/schemas/` | JSON Schemas de entrada do exemplo e da R01. |
+| `src/controllers/` | Regras e coordenação das operações do exemplo e do primeiro cenário da R01. |
+| `src/repositories/` | Consultas e escritas no banco do exemplo e da R01. |
+| `src/models/` | Mapeamentos do exemplo e os primeiros models bancários da R01. |
+| `src/dtos/` | DTOs do exemplo; a resposta curta da R01 é montada pelo controller. |
 | `src/errors/` | Exceções e tradução de erros para respostas HTTP. |
 | `src/connectors/` | Código de integração externa herdado da estrutura inicial. |
 | `src/database.py` | Engine SQLAlchemy e contexto da sessão por requisição. |
@@ -46,7 +51,7 @@ execução de entrada. Uma requisição passa pelo contexto, pelo log, pela
 verificação do `INTERNAL-TOKEN` quando exigido e pelo gerenciador de
 sessão antes de chegar ao resource. O `/health_check` dispensa token.
 
-Para uma rota bancária futura, o fluxo de código previsto é:
+Para a R01 e as demais rotas bancárias, o fluxo de código é:
 
 ```text
 HTTP → resource → validação de entrada → controller → repository → PostgreSQL

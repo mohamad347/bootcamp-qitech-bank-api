@@ -3,6 +3,7 @@ from uuid import uuid4
 from tests.utils import INTERNAL_TOKEN, RandomGenerator
 from tests.utils.requisition import ClientRequisition
 
+
 class TestCreateClient:
     def test_create_valid_individual_client(self):
         payload = {
