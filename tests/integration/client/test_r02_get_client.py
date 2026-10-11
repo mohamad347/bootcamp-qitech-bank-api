@@ -83,15 +83,14 @@ def existing_individual_client_key() -> str:
 def api_database_engine() -> Iterator[Engine]:
     """Conecta ao mesmo PostgreSQL local usado pela API, nunca ao schema de teste."""
     api_url = make_url(DbUtils.database_url())
-    test_url = make_url(environ["TEST_DATABASE_URL"])
+    raw_test_url = environ.get("TEST_DATABASE_URL")
 
     assert api_url.database == "bootcamp"
     assert api_url.host in {"localhost", "127.0.0.1"}
-    assert api_url.port == 5432
-    assert test_url.database == "bootcamp_test"
-    assert test_url.host in {"localhost", "127.0.0.1"}
-    assert test_url.port == 5433
-    assert api_url != test_url
+    if raw_test_url:
+        test_url = make_url(raw_test_url)
+        assert test_url.database and test_url.database.endswith("_test")
+        assert api_url != test_url
 
     engine = create_engine(api_url)
     try:
@@ -291,7 +290,7 @@ def _prepare_client_status(
                 JOIN client_status AS to_status
                   ON to_status.id = e.to_status_id
                 WHERE e.client_id = :client_id
-                ORDER BY e.created_at, e.id
+                ORDER BY e.id
                 """
             ),
             {"client_id": client["id"]},

@@ -14,9 +14,10 @@ rota de saúde e ainda registra endpoints `sample_entity` do exemplo do
 bootcamp. A R01 `POST /client` implementa o cadastro PF/PJ, com validações,
 conflitos, persistência e rollback cobertos por testes, e já está integrada à
 `main`. A R02 `GET /client/{client_key}` está implementada e tecnicamente
-aprovada; as rotas R03–R09 continuam
-pendentes. Em `src/`, coexistem arquivos do exemplo e os componentes de CLIENT
-usados pela R01 e pela R02; ainda não há DTO bancário dedicado.
+aprovada. A R03 `POST /client/{client_key}/analysis` também está implementada,
+com Analysis Provider, MockServer, controle de concorrência e transação
+atômica. As rotas R04–R09 continuam pendentes. Em `src/`, coexistem arquivos
+do exemplo e os componentes de CLIENT usados pela R01, pela R02 e pela R03.
 
 A R02 exige `INTERNAL-TOKEN`, atende clientes `INDIVIDUAL` e `COMPANY` nos
 estados `PENDING`, `ACTIVE`, `REJECTED` e `INACTIVE` e devolve apenas o snapshot
@@ -43,17 +44,17 @@ exemplo funcionem com o banco bancário.
 | `database/database.sql` | Criação das dez tabelas bancárias, seeds, chaves, restrições e índices. |
 | `src/app.py` | Montagem do FastAPI, registro dos middlewares e das rotas disponíveis. |
 | `src/middlewares/` | Contexto de requisição, log, token interno e ciclo de vida da sessão. |
-| `src/resources/` | Entrada e saída HTTP; contém health check, rotas do exemplo, `POST /client` e `GET /client/{client_key}`. |
+| `src/resources/` | Entrada e saída HTTP; contém health check, rotas do exemplo, R01, R02 e R03. |
 | `src/schemas/` | JSON Schemas de entrada do exemplo e da R01. |
-| `src/controllers/` | Regras, coordenação da R01 e composição dos snapshots PF/PJ da R02. |
-| `src/repositories/` | Consultas e escritas do exemplo e da R01, além das consultas somente leitura da R02. |
-| `src/models/` | Mapeamentos do exemplo e dos clientes PF/PJ usados pela R01 e pela R02. |
-| `src/dtos/` | DTOs do exemplo; a resposta curta da R01 é montada pelo controller. |
+| `src/controllers/` | Regras da R01, composição dos snapshots da R02 e coordenação da análise R03. |
+| `src/repositories/` | Escritas da R01, consultas da R02 e operações transacionais da R03. |
+| `src/models/` | Mapeamentos dos clientes PF/PJ reutilizados pela R01, pela R02 e pela R03. |
+| `src/dtos/` | DTOs do exemplo e da R03; a resposta curta da R01 é montada pelo controller. |
 | `src/errors/` | Exceções e tradução de erros para respostas HTTP. |
-| `src/connectors/` | Código de integração externa herdado da estrutura inicial. |
+| `src/connectors/` | Base das integrações HTTP e Connector do Analysis Provider usado pela R03. |
 | `src/database.py` | Engine SQLAlchemy e contexto da sessão por requisição. |
 | `tests/integration/database/` | Testes do schema físico em PostgreSQL real. |
-| `tests/integration/client/` | Testes HTTP da R01 e da R02, além dos testes separados de persistência da R01. |
+| `tests/integration/client/` | Testes HTTP da R01 e da R02, persistência da R01 e testes da R03 separados por comportamento. |
 | `tests/integration/test_healthcheck.py` | Testes HTTP da rota de saúde. |
 | `docker-compose.yml` e `compose.test.yml` | Ambiente da API e banco separado para testes de schema. |
 
@@ -87,6 +88,11 @@ Resource → Controller → Repository → PostgreSQL
 O resource delega a consulta, o controller valida a chave e compõe o snapshot
 da especialização, e o repository consulta o CLIENT e seu perfil. Esse fluxo
 não executa escrita, `flush` ou `commit`.
+
+Na R03, a primeira leitura valida o estado e copia os dados necessários para
+um DTO antes da chamada HTTP. Depois da resposta do provider, uma nova etapa
+transacional bloqueia e revalida o CLIENT, atualiza o status, cria o evento e
+executa um único commit.
 
 ### Sessão e transação
 

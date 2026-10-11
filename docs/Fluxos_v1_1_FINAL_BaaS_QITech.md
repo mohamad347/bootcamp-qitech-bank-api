@@ -147,16 +147,12 @@ não existe CLIENT parcialmente criado
 
 ## 1.3 Análise — R03
 
-### APPROVE
-
 ```text
 POST /client/{client_key}/analysis
 ↓
-auth + validar key/body
+auth + validar client_key
 ↓
-BEGIN
-↓
-SELECT CLIENT FOR UPDATE
+buscar CLIENT
 ↓
 CLIENT existe?
 ├── não -> 404 CLI0001
@@ -166,41 +162,46 @@ CLIENT = PENDING?
 ├── não -> 409 CLI0002
 └── sim
 ↓
-PENDING -> ACTIVE
+copiar client_key + client_type + CPF/CNPJ
 ↓
-UPDATE CLIENT
+encerrar transação de leitura
 ↓
-INSERT CLIENT_STATUS_EVENT
-PENDING -> ACTIVE
+POST Analysis Provider /v1/client-analysis
+↓
+APPROVE ou REJECT
+↓
+SELECT CLIENT FOR UPDATE
+↓
+revalidar PENDING
+├── não -> 409 CLI0002
+└── sim
+↓
+APPROVE -> ACTIVE
+REJECT  -> REJECTED
+↓
+UPDATE CLIENT + INSERT CLIENT_STATUS_EVENT
 actor_type = INTERNAL
 ↓
-COMMIT
+COMMIT único
 ↓
-200 ACTIVE
+200 ACTIVE ou REJECTED
 ```
 
-`reason` é opcional em `APPROVE`.
+O caller não envia body com `decision`. Durante os testes, o Analysis
+Provider é o MockServer configurado pelo pytest.
 
-### REJECT
+### Contrato externo
 
-```text
-decision = REJECT
-reason obrigatório
-↓
-CLIENT FOR UPDATE
-↓
-PENDING -> REJECTED
-↓
-UPDATE CLIENT
-↓
-INSERT CLIENT_STATUS_EVENT
-actor_type = INTERNAL
-reason normalizado
-↓
-COMMIT
-↓
-200 REJECTED
+```json
+{
+  "client_key": "<uuid>",
+  "client_type": "INDIVIDUAL ou COMPANY",
+  "document": "<CPF ou CNPJ normalizado>"
+}
 ```
+
+Para `REJECT`, o provider deve devolver `reason` string, não vazio após
+trim e com no máximo 500 caracteres. Esse motivo é persistido no evento.
 
 Depois de rejeitado:
 
@@ -304,6 +305,7 @@ sem cadastro parcial.
 sequenceDiagram
     actor Partner as Partner Backend
     participant API as BaaS API
+    participant Provider as Analysis Provider
     participant DB as PostgreSQL
 
     Partner->>API: POST /client
@@ -312,8 +314,11 @@ sequenceDiagram
     API->>DB: COMMIT
     API-->>Partner: 201 PENDING
 
-    Partner->>API: POST /client/{client_key}/analysis APPROVE
-    API->>DB: SELECT CLIENT FOR UPDATE
+    Partner->>API: POST /client/{client_key}/analysis
+    API->>DB: Busca CLIENT PENDING
+    API->>Provider: POST /v1/client-analysis
+    Provider-->>API: APPROVE
+    API->>DB: SELECT CLIENT FOR UPDATE + revalidação
     API->>DB: PENDING -> ACTIVE + evento
     API->>DB: COMMIT
     API-->>Partner: 200 ACTIVE
@@ -372,8 +377,8 @@ R06
 ```mermaid
 stateDiagram-v2
     [*] --> PENDING
-    PENDING --> ACTIVE: R03 APPROVE
-    PENDING --> REJECTED: R03 REJECT
+    PENDING --> ACTIVE: R03 / provider APPROVE
+    PENDING --> REJECTED: R03 / provider REJECT
     REJECTED --> PENDING: R09 reanalysis
     ACTIVE --> INACTIVE: R09 sem ACCOUNT / R06 com ACCOUNT
     INACTIVE --> ACTIVE: R09 sem ACCOUNT / R06 com ACCOUNT
@@ -707,7 +712,7 @@ CLOSED somente com balance_cents = 0
 R09 ACTIVE <-> INACTIVE somente sem ACCOUNT
 com ACCOUNT -> R06
 REJECTED -> PENDING sem limite máximo
-R03 decide PENDING -> ACTIVE/REJECTED
+R03 aplica APPROVE/REJECT recebido do Analysis Provider
 CLIENT lock antes de ACCOUNT
 estado + eventos reais no mesmo COMMIT
 sem evento from_status == to_status
@@ -2135,6 +2140,7 @@ timezone obrigatório                   ✅
 idade >= 18                            ✅
 CLIENT nasce PENDING                   ✅
 evento NULL -> PENDING SYSTEM          ✅
+R03 usa Analysis Provider + MockServer  ✅
 R03 PENDING -> ACTIVE/REJECTED          ✅
 R04 somente CLIENT ACTIVE              ✅
 uma ACCOUNT por CLIENT                 ✅

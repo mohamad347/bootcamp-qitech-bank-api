@@ -11,6 +11,7 @@ from middlewares import (
 )
 from resources import (
     AccountResource,
+    ClientAnalysisResource,
     ClientResource,
     HealthCheckResource,
     SampleEntityResource,
@@ -130,6 +131,7 @@ def create_app() -> FastAPI:
     health_check_resource = HealthCheckResource()
     sample_entity_resource = SampleEntityResource()
     client_resource = ClientResource()
+    client_analysis_resource = ClientAnalysisResource()
     account_resource = AccountResource()
 
     application.add_api_route("/", health_check_resource.on_get_home, methods=["GET"])
@@ -168,6 +170,11 @@ def create_app() -> FastAPI:
     application.add_api_route(
         "/client",
         client_resource.on_post,
+        methods=["POST"],
+    )
+    application.add_api_route(
+        "/client/{client_key}/analysis",
+        client_analysis_resource.on_post,
         methods=["POST"],
     )
     application.add_api_route(

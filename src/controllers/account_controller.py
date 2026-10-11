@@ -1,9 +1,10 @@
+
 from uuid import UUID
 
 from controllers.base_controller import BaseController
 from errors import (
     AccountAlreadyExists,
-    ClientNotActive,
+    InvalidClientStatus,
     ClientNotFound,
     InternalError,
     InvalidSchema,
@@ -31,7 +32,10 @@ class AccountController(BaseController):
                 raise ClientNotFound(client_key)
 
             if client.status.enumerator != ClientStatus.ACTIVE:
-                raise ClientNotActive()
+                raise InvalidClientStatus(
+                    current_status=client.status.enumerator,
+                    required_status=ClientStatus.ACTIVE,
+                )
 
             if self.account_repository.get_by_client_id(client.id) is not None:
                 raise AccountAlreadyExists()

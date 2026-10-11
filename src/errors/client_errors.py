@@ -14,6 +14,25 @@ class ClientNotFound(QIException):
         )
 
 
+class InvalidClientStatus(QIException):
+    code = "CLI0002"
+
+    def __init__(self, current_status: str, required_status: str) -> None:
+        super().__init__(
+            title="Client status conflict",
+            code=self.code,
+            http_status=409,
+            description=(
+                f"Client with status {current_status} cannot perform an operation "
+                f"that requires status {required_status}."
+            ),
+            translation=(
+                f"O cliente com status {current_status} não pode executar uma "
+                f"operação que exige o status {required_status}."
+            ),
+        )
+
+
 class DuplicateClientEmail(QIException):
     code = "CLI0003"
 

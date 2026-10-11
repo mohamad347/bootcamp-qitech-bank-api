@@ -1,13 +1,13 @@
 # R02 — Plano Completo de Testes e Implementação
 ## `GET /client/{client_key}` | BaaS Simplificado — Bootcamp QI Tech 2026
 
-**Status:** PLANEJADO — execução por blocos TDD, com revisão humana antes de commit/push  
-**Rota:** R02 — `GET /client/{client_key}`  
-**Issue:** Issue 03, conforme identificação de trabalho informada pelo time (confirmar ID numérico no GitHub, se necessário)  
-**Branch:** `feature/r02-client-get` — **já criada, publicada e sincronizada**  
-**Branch-base:** `feature/r01-client-create`, pois a R01 ainda não foi integrada à `main`  
-**Commit de base conhecido:** `e3ef46a` — `test(r01): complete GHI coverage and persistence validation`  
-**Baseline:** 114 testes aprovados na suíte completa; 43 testes funcionais e 7 de persistência da R01  
+**Status:** PLANEJADO — execução por blocos TDD, com revisão humana antes de commit/push
+**Rota:** R02 — `GET /client/{client_key}`
+**Issue:** Issue 03, conforme identificação de trabalho informada pelo time (confirmar ID numérico no GitHub, se necessário)
+**Branch:** `feature/r02-client-get` — **já criada, publicada e sincronizada**
+**Branch-base:** `feature/r01-client-create`, pois a R01 ainda não foi integrada à `main`
+**Commit de base conhecido:** `e3ef46a` — `test(r01): complete GHI coverage and persistence validation`
+**Baseline:** 114 testes aprovados na suíte completa; 43 testes funcionais e 7 de persistência da R01
 **Método:** TDD (RED → GREEN → REFACTOR), um comportamento novo por vez; testes existentes não devem regredir.
 
 > **Natureza do documento.** Este é o plano de trabalho da R02, não um contrato novo. Em caso de divergência, prevalecem os contratos finais/congelados do repositório. Os nomes dos arquivos e métodos ainda não criados são *propostas*, não uma exigência de estrutura. A execução deve comparar as propostas com o código **atual** antes de decidir.

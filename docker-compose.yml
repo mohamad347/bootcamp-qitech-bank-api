@@ -42,6 +42,10 @@ services:
       BANKSLIP_API_URL: ${BANKSLIP_API_URL:-http://localhost:8080}
       BANKSLIP_API_INTERNAL_TOKEN: ${BANKSLIP_API_INTERNAL_TOKEN:-default_token}
       BANKSLIP_API_TIMEOUT: ${BANKSLIP_API_TIMEOUT:-5}
+      # O provider da analise cadastral. No ambiente local, o nome
+      # "mockserver" e resolvido pela rede padrao do Docker Compose.
+      ANALYSIS_PROVIDER_URL: ${ANALYSIS_PROVIDER_URL:-http://mockserver:1080}
+      ANALYSIS_PROVIDER_TIMEOUT: ${ANALYSIS_PROVIDER_TIMEOUT:-5}
     volumes:
       # Monta o codigo pra dentro do container: salvou o arquivo,
       # a API recarrega sozinha (o --reload ali embaixo).
@@ -77,4 +81,13 @@ services:
       interval: 3s
       timeout: 3s
       retries: 20
+
+  mockserver:
+    image: mockserver/mockserver:8.0.0
+    ports:
+      # A API usa mockserver:1080 dentro do Compose; o pytest usa esta
+      # porta publicada no host para resetar e configurar expectations.
+      - "127.0.0.1:${MOCKSERVER_PORT:-1080}:1080"
+    environment:
+      MOCKSERVER_LOG_LEVEL: ${MOCKSERVER_LOG_LEVEL:-WARN}
 

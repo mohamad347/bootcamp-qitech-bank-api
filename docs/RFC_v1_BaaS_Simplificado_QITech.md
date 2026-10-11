@@ -10,16 +10,16 @@
 
 ### Entendendo o problema
 
-O projeto deve oferecer a uma plataforma parceira um serviço bancário simplificado para clientes PF e PJ, cobrindo cadastro, análise cadastral, abertura e gerenciamento de conta, depósitos, transferências e consulta de extrato. O ponto crítico é garantir que operações financeiras concorrentes não produzam saldo negativo, débito sem crédito correspondente ou histórico incoerente. Retentativas também não podem duplicar uma movimentação já confirmada, e o extrato deve permanecer compatível com a evolução real do saldo. Mudanças de estado de cliente e conta precisam ser rastreáveis e não podem gerar combinações incompatíveis. A entrega considera uma única plataforma parceira por implantação, operação no Brasil e moeda BRL. Ficam fora do escopo multi-tenancy, múltiplas moedas, PIX, TED, boleto, saque, reversão, KYC externo e contabilidade completa por partidas dobradas.
+O projeto deve oferecer a uma plataforma parceira um serviço bancário simplificado para clientes PF e PJ, cobrindo cadastro, análise cadastral, abertura e gerenciamento de conta, depósitos, transferências e consulta de extrato. O ponto crítico é garantir que operações financeiras concorrentes não produzam saldo negativo, débito sem crédito correspondente ou histórico incoerente. Retentativas também não podem duplicar uma movimentação já confirmada, e o extrato deve permanecer compatível com a evolução real do saldo. Mudanças de estado de cliente e conta precisam ser rastreáveis e não podem gerar combinações incompatíveis. A entrega considera uma única plataforma parceira por implantação, operação no Brasil e moeda BRL. Ficam fora do escopo multi-tenancy, múltiplas moedas, PIX, TED, boleto, saque, reversão, integração com um fornecedor real específico de KYC e contabilidade completa por partidas dobradas.
 
 ### Explicando a solução de forma macro
 
-A solução separa cadastro e lifecycle do núcleo financeiro, mantém o saldo operacional atual junto de um histórico imutável dos efeitos de cada operação e trata mudanças relacionadas como uma única unidade atômica. Operações concorrentes sobre os mesmos recursos são serializadas por locks de linha e revalidadas antes da escrita; transferências seguem uma ordem global de locks para reduzir deadlocks. Retentativas financeiras usam uma chave de controle global combinada com um hash da intenção normalizada, permitindo devolver a operação original sem executá-la novamente. O extrato é derivado dos efeitos financeiros persistidos, preservando saldo após cada movimento, ordenação determinística e filtros de datas civis no timezone do cliente.
+A solução separa cadastro e lifecycle do núcleo financeiro, mantém o saldo operacional atual junto de um histórico imutável dos efeitos de cada operação e trata mudanças relacionadas como uma única unidade atômica. A análise cadastral chama um Analysis Provider por HTTP; no ambiente de desenvolvimento e teste, esse papel é exercido pelo MockServer com respostas determinísticas configuradas pelo pytest. Operações concorrentes sobre os mesmos recursos são serializadas por locks de linha e revalidadas antes da escrita; transferências seguem uma ordem global de locks para reduzir deadlocks. Retentativas financeiras usam uma chave de controle global combinada com um hash da intenção normalizada, permitindo devolver a operação original sem executá-la novamente. O extrato é derivado dos efeitos financeiros persistidos, preservando saldo após cada movimento, ordenação determinística e filtros de datas civis no timezone do cliente.
 
 - **Full double-entry ledger** — descartado porque exigiria contas internas de clearing e receita de tarifa, além de alterar saldo, depósito, transferência, extrato e testes. Ganharia se o produto exigisse contabilidade bancária completa.
 - **Multi-tenancy no mesmo banco** — descartado porque adicionaria isolamento por parceiro em todas as entidades e consultas. Ganharia se uma única implantação precisasse servir múltiplas plataformas simultaneamente.
 - **Cursor/keyset pagination no extrato** — descartado porque aumentaria o contrato e a implementação sem necessidade para o volume do D0. Ganharia se histórico muito grande ou snapshot estável entre páginas virasse requisito.
-- **KYC/bureau externo** — descartado porque o desafio não exige integração cadastral externa. Ganharia se aprovação dependesse de uma fonte real de risco ou identidade.
+- **Fornecedor real específico de KYC/bureau** — descartado porque o exercício precisa apenas demonstrar a integração. Um contrato mínimo de Analysis Provider, simulado por MockServer nos testes, preserva a fronteira HTTP sem depender de um serviço comercial.
 
 ## Implementação
 
@@ -29,7 +29,7 @@ A solução separa cadastro e lifecycle do núcleo financeiro, mantém o saldo o
 |---|---|---|---|---|
 | `POST` | `/client` | Cadastra PF/PJ em `PENDING`; não idempotente | `client_type`, email, CPF ou CNPJ, dados PF/PJ, `timezone` | `201` criado; `400` schema/documento/timezone inválido; `403` token inválido; `409` email/CPF/CNPJ duplicado; `422` PF menor de 18; `500` interno |
 | `GET` | `/client/{client_key}` | Consulta snapshot do cliente; GET idempotente | `client_key` | `200` encontrado; `400` UUID inválido; `403` token inválido; `404` cliente inexistente; `500` interno |
-| `POST` | `/client/{client_key}/analysis` | Decide `PENDING -> ACTIVE/REJECTED`; não idempotente | `client_key`, `decision`, `reason` quando rejeita | `200` analisado; `400` request inválida; `403` token inválido; `404` cliente inexistente; `409` estado não permite análise; `500` interno |
+| `POST` | `/client/{client_key}/analysis` | Solicita análise externa e aplica `PENDING -> ACTIVE/REJECTED`; não idempotente | `client_key`; sem body obrigatório | `200` analisado; `400` UUID inválido; `403` token inválido; `404` cliente inexistente; `409` estado não permite análise; `500` falha interna ou do provider |
 | `POST` | `/client/{client_key}/account` | Abre a única conta vitalícia do cliente; não idempotente | `client_key` | `201` conta criada; `400` request inválida; `403` token inválido; `404` cliente inexistente; `409` cliente não `ACTIVE` ou conta já existe; `500` interno |
 | `GET` | `/account/{account_key}` | Consulta snapshot da conta; GET idempotente | `account_key` | `200` encontrada; `400` UUID inválido; `403` token inválido; `404` conta inexistente; `500` interno |
 | `PATCH` | `/account/{account_key}` | Altera lifecycle da conta e coordena o cliente; não idempotente | `account_key`, `status`, `reason` | `200` alterada; `400` request inválida; `403` token inválido; `404` conta inexistente; `409` transição/estado/saldo incompatível; `500` interno |
@@ -150,7 +150,7 @@ erDiagram
 **Onboarding — caminho feliz**
 
 1. O parceiro cadastra um cliente; a entrada é validada e normalizada, e cliente, especialização PF/PJ e evento inicial `NULL -> PENDING` são confirmados no mesmo `COMMIT`.
-2. A análise trava o cliente, revalida `PENDING` e confirma `PENDING -> ACTIVE` com o respectivo evento.
+2. A análise lê o cliente `PENDING`, chama o Analysis Provider sem manter lock aberto, depois trava e revalida o cliente antes de confirmar `PENDING -> ACTIVE/REJECTED` com o respectivo evento.
 3. A abertura de conta trava o cliente, revalida `ACTIVE` e ausência de conta anterior, cria a conta `ACTIVE` com saldo zero e registra o evento inicial no mesmo `COMMIT`.
 
 **Onboarding — falha: abertura concorrente de conta**
