@@ -144,31 +144,55 @@ class ClientController(BaseController):
         client = self.client_repository.get_by_key(client_key)
         if client is None:
             raise RuntimeError(f"Client {client_key} was not found")
-        if client.client_type != "INDIVIDUAL":
-            raise RuntimeError(
-                f"Client type {client.client_type} is not supported yet"
-            )
 
-        individual_client = self.client_repository.get_individual_by_client_id(
-            client.id
-        )
-        if individual_client is None:
-            raise RuntimeError(
-                f"Individual profile for Client {client_key} was not found"
-            )
-
-        return {
+        response_data = {
             "client_key": str(client.client_key),
             "client_type": client.client_type,
             "email": client.email,
             "timezone": client.timezone,
             "status": client.status.enumerator,
-            "cpf": individual_client.cpf,
-            "full_name": individual_client.full_name,
-            "birth_date": individual_client.birth_date.isoformat(),
             "created_at": self._as_utc_isoformat(client.created_at),
             "updated_at": self._as_utc_isoformat(client.updated_at),
         }
+
+        if client.client_type == "INDIVIDUAL":
+            individual_client = self.client_repository.get_individual_by_client_id(
+                client.id
+            )
+            if individual_client is None:
+                raise RuntimeError(
+                    f"Individual profile for Client {client_key} was not found"
+                )
+
+            response_data.update(
+                {
+                    "cpf": individual_client.cpf,
+                    "full_name": individual_client.full_name,
+                    "birth_date": individual_client.birth_date.isoformat(),
+                }
+            )
+        elif client.client_type == "COMPANY":
+            company_client = self.client_repository.get_company_by_client_id(
+                client.id
+            )
+            if company_client is None:
+                raise RuntimeError(
+                    f"Company profile for Client {client_key} was not found"
+                )
+
+            response_data.update(
+                {
+                    "cnpj": company_client.cnpj,
+                    "legal_name": company_client.legal_name,
+                    "trade_name": company_client.trade_name,
+                }
+            )
+        else:
+            raise RuntimeError(
+                f"Unsupported client type {client.client_type} for Client {client_key}"
+            )
+
+        return response_data
 
     @staticmethod
     def _as_utc_isoformat(value: datetime) -> str:

@@ -52,6 +52,13 @@ class ClientRepository:
             .one_or_none()
         )
 
+    def get_company_by_client_id(self, client_id: int) -> CompanyClient | None:
+        return (
+            self.session.query(CompanyClient)
+            .filter(CompanyClient.client_id == client_id)
+            .one_or_none()
+        )
+
     def create_client(
         self,
         client_type: str,
