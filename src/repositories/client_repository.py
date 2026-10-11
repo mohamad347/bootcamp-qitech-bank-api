@@ -6,6 +6,7 @@ from models import (
     Client,
     ClientStatus,
     ClientStatusEvent,
+    CompanyClient,
     IndividualClient,
 )
 
@@ -55,8 +56,8 @@ class ClientRepository:
 
         self.session.add(client)
 
-        # Precisamos do client.id para criar individual_client
-        # e client_status_event, mas ainda NÃO queremos commit.
+        # Precisamos do client.id para a especialização e o evento,
+        # mas ainda NÃO queremos commit.
         self.session.flush()
 
         return client
@@ -77,6 +78,23 @@ class ClientRepository:
         self.session.add(individual_client)
 
         return individual_client
+
+    def create_company_client(
+        self,
+        client: Client,
+        cnpj: str,
+        legal_name: str,
+        trade_name: str,
+    ) -> CompanyClient:
+        company_client = CompanyClient()
+        company_client.client_id = client.id
+        company_client.cnpj = cnpj
+        company_client.legal_name = legal_name
+        company_client.trade_name = trade_name
+
+        self.session.add(company_client)
+
+        return company_client
 
     def create_status_event(
         self,

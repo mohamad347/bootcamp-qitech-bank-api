@@ -466,3 +466,30 @@ class TestCreateClient:
         assert {"title", "description", "translation", "code"} <= set(
             second_response.response_json
         )
+
+    def test_create_valid_company_client(self) -> None:
+        payload = {
+            "client_type": "COMPANY",
+            "email": f"r01.company.valid.{uuid4()}@example.com",
+            "cnpj": RandomGenerator.generate_cnpj(),
+            "legal_name": "Empresa Teste Ltda",
+            "trade_name": "Empresa Teste",
+            "timezone": "America/Sao_Paulo",
+        }
+
+        response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+
+        assert response.response_status == 201
+
+        response_body = response.response_json
+        assert isinstance(response_body, dict)
+        assert set(response_body) == {"client_key", "client_type", "status"}
+        assert response_body["client_type"] == "COMPANY"
+        assert response_body["status"] == "PENDING"
+        assert isinstance(response_body["client_key"], str)
+        assert isinstance(UUID(response_body["client_key"]), UUID)

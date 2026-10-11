@@ -48,44 +48,62 @@ class ClientController(BaseController):
     def create(self, client_data: dict) -> dict:
         self.logger.debug("Criando um novo Client")
 
+        client_type = client_data["client_type"]
         email = client_data["email"].strip().lower()
         timezone_name = client_data["timezone"]
-        full_name = client_data["full_name"].strip()
-        if not full_name:
-            raise InvalidSchema("full_name must not be empty after trimming")
 
-        cpf = self._only_digits(client_data["cpf"])
-        try:
-            birth_date = date.fromisoformat(client_data["birth_date"])
-        except ValueError:
-            raise InvalidSchema("birth_date must be a valid calendar date") from None
+        if client_type == "INDIVIDUAL":
+            full_name = client_data["full_name"].strip()
+            if not full_name:
+                raise InvalidSchema("full_name must not be empty after trimming")
+
+            cpf = self._only_digits(client_data["cpf"])
+            try:
+                birth_date = date.fromisoformat(client_data["birth_date"])
+            except ValueError:
+                raise InvalidSchema(
+                    "birth_date must be a valid calendar date"
+                ) from None
 
         if timezone_name not in SUPPORTED_BRAZIL_TIMEZONES:
             raise UnsupportedClientTimezone()
 
-        if not is_valid_cpf(cpf):
-            raise InvalidClientCPF()
+        if client_type == "INDIVIDUAL":
+            if not is_valid_cpf(cpf):
+                raise InvalidClientCPF()
 
-        age = self._age_in_years(birth_date, timezone_name)
-        if age < MINIMUM_AGE:
-            raise UnderageClient(age, MINIMUM_AGE)
+            age = self._age_in_years(birth_date, timezone_name)
+            if age < MINIMUM_AGE:
+                raise UnderageClient(age, MINIMUM_AGE)
+        else:
+            cnpj = self._only_digits(client_data["cnpj"])
+            legal_name = client_data["legal_name"].strip()
+            trade_name = client_data["trade_name"].strip()
 
         pending_status = self.client_repository.get_status(ClientStatus.PENDING)
 
         try:
             client = self.client_repository.create_client(
-                client_type="INDIVIDUAL",
+                client_type=client_type,
                 email=email,
                 timezone_name=timezone_name,
                 status=pending_status,
             )
 
-            self.client_repository.create_individual_client(
-                client=client,
-                cpf=cpf,
-                full_name=full_name,
-                birth_date=birth_date,
-            )
+            if client_type == "INDIVIDUAL":
+                self.client_repository.create_individual_client(
+                    client=client,
+                    cpf=cpf,
+                    full_name=full_name,
+                    birth_date=birth_date,
+                )
+            else:
+                self.client_repository.create_company_client(
+                    client=client,
+                    cnpj=cnpj,
+                    legal_name=legal_name,
+                    trade_name=trade_name,
+                )
 
             self.client_repository.create_status_event(
                 client=client,
