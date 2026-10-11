@@ -11,11 +11,11 @@ está no [ERD](ERD_v1_1_FINAL_BaaS_QITech.md), nas
 O schema PostgreSQL v1.1 está em `database/database.sql` e tem testes de
 integração em `tests/integration/database/`. A API FastAPI responde à
 rota de saúde e ainda registra endpoints `sample_entity` do exemplo do
-bootcamp. A R01 `POST /client` já implementa o primeiro cenário TDD:
-cadastro válido de pessoa física com resposta `201`. Os demais cenários da
-R01 e as outras rotas bancárias continuam pendentes. Em `src/`, coexistem
-arquivos do exemplo e os primeiros models, repository, controller, schema e
-resource bancários; ainda não há DTO bancário dedicado.
+bootcamp. A R01 `POST /client` implementa o cadastro PF/PJ, com validações,
+conflitos, persistência e rollback cobertos por testes. As outras rotas
+bancárias continuam pendentes. Em `src/`, coexistem arquivos do exemplo e os
+models, repository, controller, schema e resource da R01; ainda não há DTO
+bancário dedicado.
 
 O [registro do primeiro refactor da R01](R01_refactor_primeiro_ciclo_TDD.md)
 resume o que mudou sem ampliar o comportamento da rota.
@@ -33,14 +33,15 @@ exemplo funcionem com o banco bancário.
 | `src/middlewares/` | Contexto de requisição, log, token interno e ciclo de vida da sessão. |
 | `src/resources/` | Entrada e saída HTTP; contém health check, rotas do exemplo e `POST /client`. |
 | `src/schemas/` | JSON Schemas de entrada do exemplo e da R01. |
-| `src/controllers/` | Regras e coordenação das operações do exemplo e do primeiro cenário da R01. |
+| `src/controllers/` | Regras e coordenação das operações do exemplo e da R01 PF/PJ. |
 | `src/repositories/` | Consultas e escritas no banco do exemplo e da R01. |
-| `src/models/` | Mapeamentos do exemplo e os primeiros models bancários da R01. |
+| `src/models/` | Mapeamentos do exemplo e dos clientes PF/PJ da R01. |
 | `src/dtos/` | DTOs do exemplo; a resposta curta da R01 é montada pelo controller. |
 | `src/errors/` | Exceções e tradução de erros para respostas HTTP. |
 | `src/connectors/` | Código de integração externa herdado da estrutura inicial. |
 | `src/database.py` | Engine SQLAlchemy e contexto da sessão por requisição. |
 | `tests/integration/database/` | Testes do schema físico em PostgreSQL real. |
+| `tests/integration/client/` | Testes HTTP da R01 e testes separados de persistência com consultas somente de leitura ao banco da API. |
 | `tests/integration/test_healthcheck.py` | Testes HTTP da rota de saúde. |
 | `docker-compose.yml` e `compose.test.yml` | Ambiente da API e banco separado para testes de schema. |
 
