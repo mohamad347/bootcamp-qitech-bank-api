@@ -14,7 +14,7 @@ rota de saúde e ainda registra endpoints `sample_entity` do exemplo do
 bootcamp. A R01 `POST /client` implementa o cadastro PF/PJ, com validações,
 conflitos, persistência e rollback cobertos por testes, e já está integrada à
 `main`. A R02 `GET /client/{client_key}` está implementada e tecnicamente
-aprovada nesta branch, aguardando integração; as rotas R03–R09 continuam
+aprovada; as rotas R03–R09 continuam
 pendentes. Em `src/`, coexistem arquivos do exemplo e os componentes de CLIENT
 usados pela R01 e pela R02; ainda não há DTO bancário dedicado.
 

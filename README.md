@@ -2,7 +2,7 @@
 
 API de Banking as a Service desenvolvida no Bootcamp QI Tech 2026. O projeto atende uma plataforma parceira por implantação e modela cadastro de clientes PF/PJ, contas e movimentações em reais. A proposta é evoluir o serviço com TDD, validando cada comportamento antes de implementá-lo.
 
-**Estado atual:** o schema PostgreSQL v1.1 e seus testes de integração estão implementados. A R01 `POST /client` cadastra pessoas físicas e jurídicas e já está integrada à `main`. A R02 `GET /client/{client_key}` também está implementada e tecnicamente aprovada nesta branch, aguardando integração. As rotas R03–R09 continuam em desenvolvimento.
+**Estado atual:** o schema PostgreSQL v1.1 e seus testes de integração estão implementados. A R01 `POST /client` cadastra pessoas físicas e jurídicas e já está integrada à `main`. A R02 `GET /client/{client_key}` está implementada e tecnicamente aprovada. As rotas R03–R09 continuam em desenvolvimento.
 
 ## Escopo do produto
 
@@ -17,7 +17,7 @@ O D0 opera no Brasil, em BRL, com uma plataforma parceira por implantação. PIX
 | Banco | `database/database.sql` cria as dez tabelas do [ERD v1.1](docs/ERD_v1_1_FINAL_BaaS_QITech.md), com status iniciais, chaves, constraints e índices aprovados. |
 | Testes do banco | A suíte em `tests/integration/database/` verifica a estrutura e as restrições em PostgreSQL real, usando um banco descartável separado. |
 | API básica | `GET /health_check` responde `204` sem token. A aplicação também possui rota raiz, middlewares e tratamento de erros. |
-| Rotas bancárias R01–R09 | R01 implementada e integrada à `main`; R02 implementada e aprovada tecnicamente, aguardando integração; R03–R09 pendentes. |
+| Rotas bancárias R01–R09 | R01 implementada e integrada à `main`; R02 implementada e validada; R03–R09 pendentes. |
 
 A R02 exige `INTERNAL-TOKEN` e consulta clientes `INDIVIDUAL` e `COMPANY`
 nos estados `PENDING`, `ACTIVE`, `REJECTED` e `INACTIVE`. A resposta é um
@@ -97,7 +97,7 @@ docker compose -f compose.test.yml stop db_test
 
 ## Contratos da API
 
-As rotas abaixo formam o contrato v1.1 do produto. **R01 e R10 estão disponíveis na `main`**. A R02 está implementada nesta branch e aguarda integração; R03–R09 indicam trabalho previsto, não endpoints já utilizáveis.
+As rotas abaixo formam o contrato v1.1 do produto. **R01, R02 e R10 estão implementadas**; R03–R09 indicam trabalho previsto, não endpoints já utilizáveis.
 
 | Grupo | Rotas do contrato |
 | --- | --- |
