@@ -1,6 +1,9 @@
 
 from uuid import UUID
 
+from psycopg2.errors import UniqueViolation
+from sqlalchemy.exc import IntegrityError
+
 from controllers.base_controller import BaseController
 from errors import (
     AccountAlreadyExists,
@@ -62,6 +65,14 @@ class AccountController(BaseController):
             }
             self.session.commit()
             return response
+        except IntegrityError as error:
+            self.session.rollback()
+            if (
+                isinstance(error.orig, UniqueViolation)
+                and error.orig.diag.constraint_name == "account_client_id_key"
+            ):
+                raise AccountAlreadyExists() from error
+            raise
         except Exception:
             self.session.rollback()
             raise
