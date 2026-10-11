@@ -2,6 +2,7 @@ from sqlalchemy import BigInteger, Column, String, UniqueConstraint
 
 from models.base import Base
 
+
 class ClientStatus(Base):
     __tablename__ = "client_status"
     id = Column(BigInteger, primary_key=True)

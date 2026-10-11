@@ -10,9 +10,9 @@ class ClientResource:
     @SchemaHandler.validate("post_client.json")
     def on_post(self, payload: dict) -> JSONResponse:
         controller = ClientController()
-        client = controller.create(payload)
+        client_response = controller.create(payload)
 
         return JSONResponse(
-            content=jsonable_encoder(client),
+            content=jsonable_encoder(client_response),
             status_code=http_status.HTTP_201_CREATED,
         )

@@ -5,6 +5,7 @@ from sqlalchemy.orm import relationship
 from models.base import Base
 from models.client_status import ClientStatus
 
+
 class Client(Base):
     __tablename__ = "client"
     id = Column(BigInteger, primary_key=True)

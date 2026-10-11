@@ -159,13 +159,11 @@ def create_app() -> FastAPI:
         methods=["GET"],
     )
 
-
     application.add_api_route(
         "/client",
         client_resource.on_post,
         methods=["POST"],
     )
-
 
     register_error_handlers(application)
 

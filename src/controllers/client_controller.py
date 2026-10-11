@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from controllers.base_controller import BaseController
@@ -76,13 +76,15 @@ class ClientController(BaseController):
             actor_type=ClientStatusEvent.SYSTEM,
         )
 
-        self.session.commit()
-
-        return {
+        # Captura os dados antes do commit, que expira os atributos ORM.
+        response_data = {
             "client_key": str(client.client_key),
             "client_type": client.client_type,
             "status": pending_status.enumerator,
         }
+
+        self.session.commit()
+        return response_data
 
     @staticmethod
     def _only_digits(value: str) -> str:
@@ -90,8 +92,6 @@ class ClientController(BaseController):
 
     @staticmethod
     def _age_in_years(birth_date: date, timezone_name: str) -> int:
-        from datetime import datetime
-
         today = datetime.now(ZoneInfo(timezone_name)).date()
 
         age = today.year - birth_date.year
