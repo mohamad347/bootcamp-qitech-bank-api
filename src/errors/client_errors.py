@@ -1,6 +1,32 @@
 from errors.base_error import QIException
 
 
+class DuplicateClientEmail(QIException):
+    code = "CLI0003"
+
+    def __init__(self, email: str) -> None:
+        super().__init__(
+            title="Email already registered",
+            code=self.code,
+            http_status=409,
+            description=f"The email {email} is already registered.",
+            translation="O e-mail informado já está cadastrado.",
+        )
+
+
+class DuplicateClientCPF(QIException):
+    code = "CLI0004"
+
+    def __init__(self) -> None:
+        super().__init__(
+            title="CPF already registered",
+            code=self.code,
+            http_status=409,
+            description="The CPF is already registered.",
+            translation="O CPF informado já está cadastrado.",
+        )
+
+
 class InvalidClientCPF(QIException):
     code = "CLI0006"
 

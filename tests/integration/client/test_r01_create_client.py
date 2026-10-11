@@ -300,3 +300,169 @@ class TestCreateClient:
         assert {"title", "description", "translation", "code"} <= set(
             response.response_json
         )
+
+    def test_rejects_duplicate_email(
+        self, individual_payload: dict[str, str]
+    ) -> None:
+        second_cpf = RandomGenerator.generate_cpf()
+        while second_cpf == individual_payload["cpf"]:
+            second_cpf = RandomGenerator.generate_cpf()
+        second_payload = {
+            **individual_payload,
+            "cpf": second_cpf,
+            "full_name": "Maria Teste",
+        }
+
+        first_response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=individual_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+        assert first_response.response_status == 201
+
+        second_response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=second_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+
+        assert second_response.response_status == 409
+        assert second_response.response_json["code"] == "CLI0003"
+        assert {"title", "description", "translation", "code"} <= set(
+            second_response.response_json
+        )
+
+    def test_rejects_duplicate_cpf(
+        self, individual_payload: dict[str, str]
+    ) -> None:
+        second_payload = {
+            **individual_payload,
+            "email": f"r01.pf.duplicate-cpf.{uuid4()}@example.com",
+            "full_name": "Maria Teste",
+        }
+
+        first_response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=individual_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+        assert first_response.response_status == 201
+
+        second_response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=second_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+
+        assert second_response.response_status == 409
+        assert second_response.response_json["code"] == "CLI0004"
+        assert {"title", "description", "translation", "code"} <= set(
+            second_response.response_json
+        )
+
+    def test_treats_email_as_case_insensitive(
+        self, individual_payload: dict[str, str]
+    ) -> None:
+        first_email = f"User.{uuid4().hex.upper()}@Example.COM"
+        individual_payload["email"] = first_email
+
+        second_cpf = RandomGenerator.generate_cpf()
+        while second_cpf == individual_payload["cpf"]:
+            second_cpf = RandomGenerator.generate_cpf()
+        second_payload = {
+            **individual_payload,
+            "email": first_email.lower(),
+            "cpf": second_cpf,
+        }
+
+        first_response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=individual_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+        assert first_response.response_status == 201
+
+        second_response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=second_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+
+        assert second_response.response_status == 409
+        assert second_response.response_json["code"] == "CLI0003"
+        assert {"title", "description", "translation", "code"} <= set(
+            second_response.response_json
+        )
+
+    def test_trims_outer_email_whitespace_before_uniqueness_check(
+        self, individual_payload: dict[str, str]
+    ) -> None:
+        second_cpf = RandomGenerator.generate_cpf()
+        while second_cpf == individual_payload["cpf"]:
+            second_cpf = RandomGenerator.generate_cpf()
+        second_payload = {
+            **individual_payload,
+            "email": f"  {individual_payload['email']}  ",
+            "cpf": second_cpf,
+        }
+
+        first_response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=individual_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+        assert first_response.response_status == 201
+
+        second_response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=second_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+
+        assert second_response.response_status == 409
+        assert second_response.response_json["code"] == "CLI0003"
+        assert {"title", "description", "translation", "code"} <= set(
+            second_response.response_json
+        )
+
+    def test_treats_masked_and_unmasked_cpf_as_same_document(
+        self, individual_payload: dict[str, str]
+    ) -> None:
+        cpf_digits = individual_payload["cpf"].replace(".", "").replace("-", "")
+        individual_payload["cpf"] = (
+            f"{cpf_digits[:3]}.{cpf_digits[3:6]}.{cpf_digits[6:9]}-{cpf_digits[9:]}"
+        )
+        second_payload = {
+            **individual_payload,
+            "email": f"r01.pf.unmasked-cpf.{uuid4()}@example.com",
+            "cpf": cpf_digits,
+        }
+
+        first_response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=individual_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+        assert first_response.response_status == 201
+
+        second_response = ClientRequisition.send(
+            "POST",
+            "/client",
+            payload=second_payload,
+            headers={"INTERNAL-TOKEN": INTERNAL_TOKEN},
+        )
+
+        assert second_response.response_status == 409
+        assert second_response.response_json["code"] == "CLI0004"
+        assert {"title", "description", "translation", "code"} <= set(
+            second_response.response_json
+        )

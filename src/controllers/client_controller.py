@@ -1,8 +1,13 @@
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
+from psycopg2.errors import UniqueViolation
+from sqlalchemy.exc import IntegrityError
+
 from controllers.base_controller import BaseController
 from errors import (
+    DuplicateClientCPF,
+    DuplicateClientEmail,
     InvalidClientCPF,
     InvalidSchema,
     UnderageClient,
@@ -67,34 +72,45 @@ class ClientController(BaseController):
 
         pending_status = self.client_repository.get_status(ClientStatus.PENDING)
 
-        client = self.client_repository.create_client(
-            client_type="INDIVIDUAL",
-            email=email,
-            timezone_name=timezone_name,
-            status=pending_status,
-        )
+        try:
+            client = self.client_repository.create_client(
+                client_type="INDIVIDUAL",
+                email=email,
+                timezone_name=timezone_name,
+                status=pending_status,
+            )
 
-        self.client_repository.create_individual_client(
-            client=client,
-            cpf=cpf,
-            full_name=full_name,
-            birth_date=birth_date,
-        )
+            self.client_repository.create_individual_client(
+                client=client,
+                cpf=cpf,
+                full_name=full_name,
+                birth_date=birth_date,
+            )
 
-        self.client_repository.create_status_event(
-            client=client,
-            to_status=pending_status,
-            actor_type=ClientStatusEvent.SYSTEM,
-        )
+            self.client_repository.create_status_event(
+                client=client,
+                to_status=pending_status,
+                actor_type=ClientStatusEvent.SYSTEM,
+            )
 
-        # Captura os dados antes do commit, que expira os atributos ORM.
-        response_data = {
-            "client_key": str(client.client_key),
-            "client_type": client.client_type,
-            "status": pending_status.enumerator,
-        }
+            # Captura os dados antes do commit, que expira os atributos ORM.
+            response_data = {
+                "client_key": str(client.client_key),
+                "client_type": client.client_type,
+                "status": pending_status.enumerator,
+            }
 
-        self.session.commit()
+            self.session.commit()
+        except IntegrityError as error:
+            self.session.rollback()
+            if isinstance(error.orig, UniqueViolation):
+                constraint_name = error.orig.diag.constraint_name
+                if constraint_name == "client_email_key":
+                    raise DuplicateClientEmail(email) from error
+                if constraint_name == "individual_client_cpf_key":
+                    raise DuplicateClientCPF() from error
+            raise
+
         return response_data
 
     @staticmethod
