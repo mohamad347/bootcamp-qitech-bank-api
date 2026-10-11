@@ -1,5 +1,5 @@
 from datetime import date, datetime, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from database import Context
 from models import (
@@ -34,6 +34,29 @@ class ClientRepository:
             self.session.query(IndividualClient)
             .filter(IndividualClient.cpf == cpf)
             .first()
+        )
+
+    def get_by_key(self, client_key: UUID) -> Client | None:
+        return (
+            self.session.query(Client)
+            .filter(Client.client_key == client_key)
+            .one_or_none()
+        )
+
+    def get_individual_by_client_id(
+        self, client_id: int
+    ) -> IndividualClient | None:
+        return (
+            self.session.query(IndividualClient)
+            .filter(IndividualClient.client_id == client_id)
+            .one_or_none()
+        )
+
+    def get_company_by_client_id(self, client_id: int) -> CompanyClient | None:
+        return (
+            self.session.query(CompanyClient)
+            .filter(CompanyClient.client_id == client_id)
+            .one_or_none()
         )
 
     def create_client(

@@ -2,7 +2,7 @@
 
 API de Banking as a Service desenvolvida no Bootcamp QI Tech 2026. O projeto atende uma plataforma parceira por implantação e modela cadastro de clientes PF/PJ, contas e movimentações em reais. A proposta é evoluir o serviço com TDD, validando cada comportamento antes de implementá-lo.
 
-**Estado atual:** o schema PostgreSQL v1.1 e seus testes de integração estão implementados. A R01 `POST /client` cadastra pessoas físicas e jurídicas, com validações, conflitos, persistência e rollback cobertos por testes. As demais rotas bancárias continuam em desenvolvimento.
+**Estado atual:** o schema PostgreSQL v1.1 e seus testes de integração estão implementados. A R01 `POST /client` cadastra pessoas físicas e jurídicas e já está integrada à `main`. A R02 `GET /client/{client_key}` está implementada e tecnicamente aprovada. As rotas R03–R09 continuam em desenvolvimento.
 
 ## Escopo do produto
 
@@ -17,7 +17,14 @@ O D0 opera no Brasil, em BRL, com uma plataforma parceira por implantação. PIX
 | Banco | `database/database.sql` cria as dez tabelas do [ERD v1.1](docs/ERD_v1_1_FINAL_BaaS_QITech.md), com status iniciais, chaves, constraints e índices aprovados. |
 | Testes do banco | A suíte em `tests/integration/database/` verifica a estrutura e as restrições em PostgreSQL real, usando um banco descartável separado. |
 | API básica | `GET /health_check` responde `204` sem token. A aplicação também possui rota raiz, middlewares e tratamento de erros. |
-| Rotas bancárias R01–R09 | R01 implementada para PF/PJ; R02–R09 pendentes. |
+| Rotas bancárias R01–R09 | R01 implementada e integrada à `main`; R02 implementada e validada; R03–R09 pendentes. |
+
+A R02 exige `INTERNAL-TOKEN` e consulta clientes `INDIVIDUAL` e `COMPANY`
+nos estados `PENDING`, `ACTIVE`, `REJECTED` e `INACTIVE`. A resposta é um
+snapshot público, sem IDs internos, contas ou eventos, e a operação é somente
+leitura. A R02 utiliza os erros contratuais `400 QIT000001`, `403 QIT000002` e
+`404 CLI0001`. Falhas internas seguem o tratamento centralizado
+`500 QIT000500`. O marco de validação da implementação é **128 passed**.
 
 As dez tabelas se dividem em:
 
@@ -78,7 +85,7 @@ $env:SERVER_LOCALHOST = "127.0.0.1"
 .\.venv\Scripts\python.exe -m pytest tests/integration/test_healthcheck.py -q
 ```
 
-Com a API **e** o banco de teste ativos e `TEST_DATABASE_URL` definido, `.\.venv\Scripts\python.exe -m pytest -q` executa a suíte inteira, incluindo os testes da R01. O [guia dos testes de schema](docs/Testes_do_Schema_v1_1.md) explica a cobertura e como acrescentar novos cenários.
+Com a API **e** o banco de teste ativos e `TEST_DATABASE_URL` definido, `.\.venv\Scripts\python.exe -m pytest -q` executa a suíte inteira, incluindo os testes da R01 e da R02. O [guia dos testes de schema](docs/Testes_do_Schema_v1_1.md) explica a cobertura e como acrescentar novos cenários.
 
 Os testes de persistência da R01 fazem POST na API e consultam, somente para leitura, o banco principal `bootcamp` por `DATABASE_URL` (padrão local: `localhost:5432`). Eles não usam `bootcamp_test` nem desfazem os commits da API; os dados de cada execução são únicos.
 
@@ -90,7 +97,7 @@ docker compose -f compose.test.yml stop db_test
 
 ## Contratos da API
 
-As rotas abaixo formam o contrato v1.1 do produto. **R01 e R10 estão disponíveis neste momento**; R02–R09 indicam trabalho previsto, não endpoints já utilizáveis.
+As rotas abaixo formam o contrato v1.1 do produto. **R01, R02 e R10 estão implementadas**; R03–R09 indicam trabalho previsto, não endpoints já utilizáveis.
 
 | Grupo | Rotas do contrato |
 | --- | --- |
@@ -108,7 +115,7 @@ As rotas de negócio usarão `INTERNAL-TOKEN`. Consulte [Rotas v1.1](docs/Rotas_
 | `database/database.sql` | Bootstrap físico do banco v1.1. |
 | `src/` | API FastAPI; a infraestrutura básica existe, e as features bancárias serão adicionadas por fluxo. |
 | `tests/integration/database/` | Testes diretos do schema PostgreSQL. |
-| `tests/integration/client/` | Testes HTTP da R01 e verificação separada de sua persistência. |
+| `tests/integration/client/` | Testes HTTP da R01 e da R02, além da verificação separada da persistência da R01. |
 | `tests/integration/test_healthcheck.py` | Testes HTTP da API básica. |
 | `docker-compose.yml` | API e banco de desenvolvimento. |
 | `compose.test.yml` | PostgreSQL isolado para testes de schema. |
