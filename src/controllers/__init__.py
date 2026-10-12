@@ -2,3 +2,4 @@ from controllers.sample_entity_controller import SampleEntityController
 from controllers.client_controller import ClientController
 from controllers.client_analysis_controller import ClientAnalysisController
 from controllers.account_controller import AccountController
+from controllers.transaction_controller import TransactionController

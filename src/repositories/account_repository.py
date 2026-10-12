@@ -44,6 +44,25 @@ class AccountRepository:
             .one_or_none()
         )
 
+    def get_by_key_for_update(self, account_key: UUID) -> Account | None:
+        return (
+            self.session.query(Account)
+            .options(joinedload(Account.status))
+            .filter(Account.account_key == account_key)
+            .populate_existing()
+            .with_for_update(of=Account)
+            .one_or_none()
+        )
+
+    def update_balance(
+        self,
+        account: Account,
+        balance_cents: int,
+        updated_at: datetime,
+    ) -> None:
+        account.balance_cents = balance_cents
+        account.updated_at = updated_at
+
     def create_account(self, client_id: int, status: AccountStatus) -> Account:
         now = datetime.now(timezone.utc)
         account = Account(

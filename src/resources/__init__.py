@@ -3,3 +3,4 @@ from resources.sample_entity import SampleEntityResource
 from resources.client import ClientResource
 from resources.client_analysis import ClientAnalysisResource
 from resources.account import AccountResource
+from resources.transaction import TransactionResource

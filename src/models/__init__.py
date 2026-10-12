@@ -10,3 +10,5 @@ from models.client_status_event import ClientStatusEvent
 from models.account_status import AccountStatus
 from models.account import Account
 from models.account_status_event import AccountStatusEvent
+from models.financial_transaction import FinancialTransaction
+from models.transaction_entry import TransactionEntry
