@@ -3,7 +3,7 @@
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import timezone
 from os import environ
 from threading import Barrier
 from time import monotonic, sleep
@@ -101,7 +101,9 @@ def _transition_client_fixture(
             ),
             {"client_key": client_key, "expected_status": expected_status},
         ).mappings().one()
-        changed_at = datetime.now(timezone.utc)
+        changed_at = connection.execute(
+            text("SELECT clock_timestamp()")
+        ).scalar_one()
         updated = connection.execute(
             text(
                 """

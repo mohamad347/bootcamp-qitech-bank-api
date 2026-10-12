@@ -61,6 +61,38 @@ class AccountRepository:
             .one_or_none()
         )
 
+    def get_ids_by_keys(
+        self,
+        account_keys: tuple[UUID, UUID],
+    ) -> dict[UUID, int]:
+        rows = (
+            self.session.query(Account.account_key, Account.id)
+            .filter(Account.account_key.in_(account_keys))
+            .all()
+        )
+        return {row.account_key: row.id for row in rows}
+
+    def get_by_ids_for_update(
+        self,
+        account_ids: list[int],
+    ) -> list[Account]:
+        return (
+            self.session.query(Account)
+            .options(joinedload(Account.status))
+            .filter(Account.id.in_(account_ids))
+            .order_by(Account.id)
+            .populate_existing()
+            .with_for_update(of=Account)
+            .all()
+        )
+
+    def get_client_type(self, client_id: int) -> str | None:
+        return (
+            self.session.query(Client.client_type)
+            .filter(Client.id == client_id)
+            .scalar()
+        )
+
     def get_owner_id_by_key(self, account_key: UUID) -> int | None:
         return (
             self.session.query(Account.client_id)
