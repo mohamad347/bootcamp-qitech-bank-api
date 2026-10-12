@@ -51,7 +51,7 @@ sequenceDiagram
 
     opt Cliente aprovado
         Parceiro->>API: R04 POST /client/{client_key}/account
-        API->>DB: Lock CLIENT; validar ACTIVE e conta inexistente
+        API->>DB: Lock CLIENT, validar ACTIVE e conta inexistente
         API->>DB: Criar ACCOUNT ACTIVE, saldo zero e evento
         DB-->>API: COMMIT
         API-->>Parceiro: 201 account_key
