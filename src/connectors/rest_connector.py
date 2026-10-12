@@ -31,7 +31,13 @@ class RestConnector(metaclass=ABCMeta):
         de que lado está o problema.
     """
 
-    def __init__(self, class_name: str, base_url: str, timeout: int, internal_token: str) -> None:
+    def __init__(
+        self,
+        class_name: str,
+        base_url: str,
+        timeout: int,
+        internal_token: str | None = None,
+    ) -> None:
         self.logger = get_logger(class_name)
         self.base_url = base_url
         self.timeout = timeout
@@ -46,7 +52,8 @@ class RestConnector(metaclass=ABCMeta):
         # Repare na simetria com src/middlewares/internal_token.py —
         # lá a gente confere o token de quem chega; aqui a gente manda
         # o token pra quem vamos chamar.
-        headers["INTERNAL-TOKEN"] = self.internal_token
+        if self.internal_token is not None:
+            headers["INTERNAL-TOKEN"] = self.internal_token
 
         url = f"{self.base_url}{endpoint}"
 

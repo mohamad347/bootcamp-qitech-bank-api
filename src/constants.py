@@ -27,6 +27,9 @@ BANKSLIP_API_INTERNAL_TOKEN = os.environ.get("BANKSLIP_API_INTERNAL_TOKEN", "def
 # src/connectors/rest_connector.py.
 BANKSLIP_API_TIMEOUT = int(os.environ.get("BANKSLIP_API_TIMEOUT", "5"))
 
+ANALYSIS_PROVIDER_URL = os.environ.get("ANALYSIS_PROVIDER_URL")
+ANALYSIS_PROVIDER_TIMEOUT = int(os.environ.get("ANALYSIS_PROVIDER_TIMEOUT", "5"))
+
 # Rotas públicas: não exigem o header INTERNAL-TOKEN. São as duas que
 # precisam responder pra quem ainda não tem token nenhum: a raiz, que
 # diz quem é este serviço, e o health check, que o Docker consulta pra
@@ -36,7 +39,7 @@ BYPASS_ENDPOINTS = [
     "/health_check",
 ]
 
-REQUIRED_VARIABLES = ["DATABASE_URL", "INTERNAL_TOKEN"]
+REQUIRED_VARIABLES = ["DATABASE_URL", "INTERNAL_TOKEN", "ANALYSIS_PROVIDER_URL"]
 
 
 def check_variables():

@@ -2,7 +2,7 @@
 
 API de Banking as a Service desenvolvida no Bootcamp QI Tech 2026. O projeto atende uma plataforma parceira por implantação e modela cadastro de clientes PF/PJ, contas e movimentações em reais. A proposta é evoluir o serviço com TDD, validando cada comportamento antes de implementá-lo.
 
-**Estado atual:** o schema PostgreSQL v1.1 e seus testes de integração estão implementados. A R01 `POST /client` cadastra pessoas físicas e jurídicas e já está integrada à `main`. A R02 `GET /client/{client_key}` está implementada e tecnicamente aprovada. As rotas R03–R09 continuam em desenvolvimento.
+**Estado atual:** o schema PostgreSQL v1.1 e seus testes de integração estão implementados. A R01 `POST /client` cadastra pessoas físicas e jurídicas, a R02 `GET /client/{client_key}` consulta seus snapshots e a R03 `POST /client/{client_key}/analysis` executa a análise cadastral externa. As rotas R04–R09 continuam em desenvolvimento.
 
 ## Escopo do produto
 
@@ -17,7 +17,7 @@ O D0 opera no Brasil, em BRL, com uma plataforma parceira por implantação. PIX
 | Banco | `database/database.sql` cria as dez tabelas do [ERD v1.1](docs/ERD_v1_1_FINAL_BaaS_QITech.md), com status iniciais, chaves, constraints e índices aprovados. |
 | Testes do banco | A suíte em `tests/integration/database/` verifica a estrutura e as restrições em PostgreSQL real, usando um banco descartável separado. |
 | API básica | `GET /health_check` responde `204` sem token. A aplicação também possui rota raiz, middlewares e tratamento de erros. |
-| Rotas bancárias R01–R09 | R01 implementada e integrada à `main`; R02 implementada e validada; R03–R09 pendentes. |
+| Rotas bancárias R01–R09 | R01, R02 e R03 implementadas e validadas; R04–R09 pendentes. |
 
 A R02 exige `INTERNAL-TOKEN` e consulta clientes `INDIVIDUAL` e `COMPANY`
 nos estados `PENDING`, `ACTIVE`, `REJECTED` e `INACTIVE`. A resposta é um
@@ -25,6 +25,12 @@ snapshot público, sem IDs internos, contas ou eventos, e a operação é soment
 leitura. A R02 utiliza os erros contratuais `400 QIT000001`, `403 QIT000002` e
 `404 CLI0001`. Falhas internas seguem o tratamento centralizado
 `500 QIT000500`. O marco de validação da implementação é **128 passed**.
+
+A R03 também exige `INTERNAL-TOKEN`, chama o Analysis Provider sem manter lock
+de banco durante a espera HTTP e depois revalida o cliente com
+`SELECT ... FOR UPDATE`. O resultado externo realiza `PENDING -> ACTIVE` ou
+`PENDING -> REJECTED` e registra o evento na mesma transação. No ambiente de
+desenvolvimento e teste, o provider é representado pelo MockServer.
 
 As dez tabelas se dividem em:
 
@@ -46,11 +52,11 @@ docker compose ps
 curl.exe -i http://localhost:3000/health_check
 ```
 
-O último comando deve retornar `204 No Content`. Ele verifica se o processo HTTP está respondendo; não consulta o PostgreSQL. Para acompanhar a API, use `docker compose logs -f api`. Para parar os dois serviços, use `docker compose stop`.
+O último comando deve retornar `204 No Content`. Ele verifica se o processo HTTP está respondendo; não consulta o PostgreSQL. Para acompanhar a API, use `docker compose logs -f api`. Para parar os serviços, use `docker compose stop`.
 
-O Compose principal sobe `api` e `db`. O PostgreSQL executa `database/database.sql` quando inicializa um diretório de dados vazio. Reconstruir a imagem ou reiniciar um banco já inicializado não reaplica esse arquivo; mudanças posteriores no SQL devem ser verificadas no banco descartável de testes. O projeto ainda não usa migrations.
+O Compose principal sobe `api`, `db` e `mockserver`. O PostgreSQL executa `database/database.sql` quando inicializa um diretório de dados vazio. Reconstruir a imagem ou reiniciar um banco já inicializado não reaplica esse arquivo; mudanças posteriores no SQL devem ser verificadas no banco descartável de testes. O projeto ainda não usa migrations.
 
-As portas padrão são `3000` para a API e `5432` para o banco. Para mudar uma porta ou o token local, copie [`.env.example`](.env.example) para `.env` e edite os valores. O `.env` é ignorado pelo Git. Se alterar `DB_PORT`, atualize também a porta em `DATABASE_URL` usada pelos testes executados fora do Docker. Os valores padrão de usuário, senha e token são apenas para desenvolvimento local.
+As portas padrão são `3000` para a API, `5432` para o banco e `1080` para o MockServer. Para mudar uma porta ou o token local, copie [`.env.example`](.env.example) para `.env` e edite os valores. O `.env` é ignorado pelo Git. Se alterar `DB_PORT`, atualize também a porta em `DATABASE_URL` usada pelos testes executados fora do Docker. Os valores padrão de usuário, senha e token são apenas para desenvolvimento local.
 
 ## Rodar os testes
 
@@ -85,7 +91,7 @@ $env:SERVER_LOCALHOST = "127.0.0.1"
 .\.venv\Scripts\python.exe -m pytest tests/integration/test_healthcheck.py -q
 ```
 
-Com a API **e** o banco de teste ativos e `TEST_DATABASE_URL` definido, `.\.venv\Scripts\python.exe -m pytest -q` executa a suíte inteira, incluindo os testes da R01 e da R02. O [guia dos testes de schema](docs/Testes_do_Schema_v1_1.md) explica a cobertura e como acrescentar novos cenários.
+Com a API, o MockServer e o banco de teste ativos e `TEST_DATABASE_URL` definido, `.\.venv\Scripts\python.exe -m pytest -q` executa a suíte inteira, incluindo os testes da R01, da R02 e da R03. O [guia dos testes de schema](docs/Testes_do_Schema_v1_1.md) explica a cobertura e como acrescentar novos cenários.
 
 Os testes de persistência da R01 fazem POST na API e consultam, somente para leitura, o banco principal `bootcamp` por `DATABASE_URL` (padrão local: `localhost:5432`). Eles não usam `bootcamp_test` nem desfazem os commits da API; os dados de cada execução são únicos.
 
@@ -97,7 +103,7 @@ docker compose -f compose.test.yml stop db_test
 
 ## Contratos da API
 
-As rotas abaixo formam o contrato v1.1 do produto. **R01, R02 e R10 estão implementadas**; R03–R09 indicam trabalho previsto, não endpoints já utilizáveis.
+As rotas abaixo formam o contrato v1.1 do produto. **R01, R02, R03 e R10 estão implementadas**; R04–R09 indicam trabalho previsto, não endpoints já utilizáveis.
 
 | Grupo | Rotas do contrato |
 | --- | --- |
@@ -115,7 +121,7 @@ As rotas de negócio usarão `INTERNAL-TOKEN`. Consulte [Rotas v1.1](docs/Rotas_
 | `database/database.sql` | Bootstrap físico do banco v1.1. |
 | `src/` | API FastAPI; a infraestrutura básica existe, e as features bancárias serão adicionadas por fluxo. |
 | `tests/integration/database/` | Testes diretos do schema PostgreSQL. |
-| `tests/integration/client/` | Testes HTTP da R01 e da R02, além da verificação separada da persistência da R01. |
+| `tests/integration/client/` | Testes HTTP da R01 e da R02, persistência da R01 e cenários da R03 organizados por comportamento em `r03/`. |
 | `tests/integration/test_healthcheck.py` | Testes HTTP da API básica. |
 | `docker-compose.yml` | API e banco de desenvolvimento. |
 | `compose.test.yml` | PostgreSQL isolado para testes de schema. |
@@ -131,5 +137,7 @@ O desenvolvimento seguirá ciclos pequenos de **RED → GREEN → REFACTOR**. Pa
 - [RFC](docs/RFC_v1_BaaS_Simplificado_QITech.md): contexto, escolhas e limites do D0.
 - [Organização do projeto](docs/como-o-projeto-e-organizado.md): mapa do código atual e caminho para implementar as próximas rotas.
 - [Testes do schema v1.1](docs/Testes_do_Schema_v1_1.md): cobertura, isolamento e execução da suíte de banco.
+- [Plano e implementação da R02](docs/R02_Plano_Completo_Testes_e_Implementacao.md): decisões e cobertura da consulta de cliente.
+- [Contexto da R03](docs/Contexto_R03_updated.md): integração com o Analysis Provider, concorrência e MockServer.
 
 `docs/pessoal/` contém anotações locais ignoradas pelo Git e não é necessária para seguir este README. As referências acima ficam em `docs/`, fora dessa pasta.

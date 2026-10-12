@@ -597,36 +597,39 @@ Auth: INTERNAL-TOKEN
 Finalidade:
 
 ```text
-decisão de análise cadastral simulada
+solicitar análise cadastral a um Analysis Provider externo
 ```
 
-Não existe KYC/bureau externo no D0.
+O caller não envia a decisão e a rota não exige body. Durante o
+desenvolvimento e os testes, o fornecedor externo é representado pelo
+MockServer; a aplicação conhece somente `ANALYSIS_PROVIDER_URL`.
 
 ---
 
-## APPROVE
+## Contrato com o Analysis Provider
+
+```http
+POST /v1/client-analysis
+```
 
 ```json
 {
-  "decision": "APPROVE"
+  "client_key": "<uuid>",
+  "client_type": "INDIVIDUAL",
+  "document": "<cpf-ou-cnpj-normalizado>"
 }
 ```
 
-Transição:
+Respostas válidas:
 
-```text
-PENDING -> ACTIVE
+```json
+{
+  "decision": "APPROVE",
+  "reason": null
+}
 ```
 
-`reason`:
-
-```text
-opcional
-```
-
----
-
-## REJECT
+ou:
 
 ```json
 {
@@ -635,19 +638,19 @@ opcional
 }
 ```
 
-Transição:
+Para `REJECT`, `reason` é obrigatório, sofre trim, não pode ficar vazio e
+possui no máximo 500 caracteres.
+
+---
+
+## Transições
 
 ```text
+APPROVE:
+PENDING -> ACTIVE
+
+REJECT:
 PENDING -> REJECTED
-```
-
-`reason`:
-
-```text
-obrigatório
-trim
-não vazio
-máximo 500
 ```
 
 Evento:
@@ -661,17 +664,22 @@ actor_type = INTERNAL
 ## Concorrência e atomicidade
 
 ```text
+buscar CLIENT e validar PENDING
+↓
+encerrar a transação de leitura
+↓
+chamar Analysis Provider
+↓
 SELECT CLIENT ... FOR UPDATE
+↓
+revalidar PENDING
+↓
+status + evento + COMMIT
 ```
 
-Estado + evento:
-
-```text
-mesma transação
-mesmo COMMIT
-```
-
-Somente `PENDING` pode ser analisado.
+O lock não permanece aberto durante a chamada HTTP. Duas análises
+concorrentes podem chamar o provider, mas somente uma consome o estado
+`PENDING`; a segunda retorna conflito depois de adquirir o lock.
 
 Reanálise:
 
@@ -709,11 +717,11 @@ ou:
 ## Erros
 
 ```text
-400 QIT000001 -> UUID/body/decision/reason inválido
+400 QIT000010 -> client_key não é UUID válido
 403 QIT000002 -> auth
 404 CLI0001   -> CLIENT inexistente
 409 CLI0002   -> CLIENT não está PENDING
-500 QIT000500 -> falha interna
+500 QIT000500 -> provider indisponível, timeout ou resposta externa inválida
 ```
 
 Idempotência:
@@ -2080,7 +2088,8 @@ R02
 -> leitura, sem FOR UPDATE
 
 R03
--> CLIENT FOR UPDATE
+-> chamada ao Analysis Provider sem lock aberto
+-> CLIENT FOR UPDATE + revalidação PENDING
 
 R04
 -> CLIENT FOR UPDATE + UNIQUE ACCOUNT.client_id
@@ -2148,10 +2157,8 @@ currency_code persistido
 phone
 address
 UF
-KYC externo
-bureau
-Receita
-MockServer cadastral
+fornecedor comercial real de KYC/bureau
+integração com Receita
 full double-entry ledger
 FEE_REVENUE account
 EXTERNAL_CLEARING account
