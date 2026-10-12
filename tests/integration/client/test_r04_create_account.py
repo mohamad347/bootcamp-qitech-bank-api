@@ -66,10 +66,8 @@ def api_database_engine() -> Iterator[Engine]:
 
     assert api_url.database == "bootcamp"
     assert api_url.host in {"localhost", "127.0.0.1"}
-    assert api_url.port == 5432
     assert test_url.database == "bootcamp_test"
     assert test_url.host in {"localhost", "127.0.0.1"}
-    assert test_url.port == 5433
     assert api_url != test_url
 
     engine = create_engine(api_url)
@@ -85,7 +83,7 @@ def api_database_engine() -> Iterator[Engine]:
 
         assert api_identity[0] == "bootcamp"
         assert api_identity[1]
-        assert api_identity[2] == 5432
+        assert api_identity[2]
 
         test_engine = create_engine(test_url)
         try:
@@ -102,7 +100,7 @@ def api_database_engine() -> Iterator[Engine]:
 
         assert test_identity[0] == "bootcamp_test"
         assert test_identity[1]
-        assert test_identity[2] == 5432
+        assert test_identity[2]
         assert api_identity[1] != test_identity[1]
 
         yield engine

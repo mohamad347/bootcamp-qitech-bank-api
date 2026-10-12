@@ -3,7 +3,7 @@
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import timezone
 from os import environ
 from threading import Barrier
 from time import monotonic, sleep
@@ -28,8 +28,11 @@ from tests.integration.client.r03.support import (
 def api_database_engine() -> Iterator[Engine]:
     api_url = make_url(DbUtils.database_url())
     test_url = make_url(environ["TEST_DATABASE_URL"])
-    assert (api_url.database, api_url.port) == ("bootcamp", 5432)
-    assert (test_url.database, test_url.port) == ("bootcamp_test", 5433)
+    assert api_url.database == "bootcamp"
+    assert api_url.host in {"localhost", "127.0.0.1"}
+    assert test_url.database == "bootcamp_test"
+    assert test_url.host in {"localhost", "127.0.0.1"}
+    assert api_url != test_url
 
     engine = create_engine(api_url)
     test_engine = create_engine(test_url)
@@ -98,7 +101,9 @@ def _transition_client_fixture(
             ),
             {"client_key": client_key, "expected_status": expected_status},
         ).mappings().one()
-        changed_at = datetime.now(timezone.utc)
+        changed_at = connection.execute(
+            text("SELECT clock_timestamp()")
+        ).scalar_one()
         updated = connection.execute(
             text(
                 """

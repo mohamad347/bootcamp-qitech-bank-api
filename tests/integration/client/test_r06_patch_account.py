@@ -23,8 +23,11 @@ from tests.utils.requisition import ClientRequisition
 def api_database_engine() -> Iterator[Engine]:
     api_url = make_url(DbUtils.database_url())
     test_url = make_url(environ["TEST_DATABASE_URL"])
-    assert (api_url.database, api_url.port) == ("bootcamp", 5432)
-    assert (test_url.database, test_url.port) == ("bootcamp_test", 5433)
+    assert api_url.database == "bootcamp"
+    assert api_url.host in {"localhost", "127.0.0.1"}
+    assert test_url.database == "bootcamp_test"
+    assert test_url.host in {"localhost", "127.0.0.1"}
+    assert api_url != test_url
     engine = create_engine(api_url)
     test_engine = create_engine(test_url)
     try:

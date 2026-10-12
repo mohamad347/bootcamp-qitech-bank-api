@@ -28,6 +28,25 @@ class AccountAlreadyExists(QIException):
         )
 
 
+class AccountNotActive(QIException):
+    code = "ACC0005"
+
+    def __init__(self, current_status: str) -> None:
+        super().__init__(
+            title="Account status conflict",
+            code=self.code,
+            http_status=409,
+            description=(
+                f"Account with status {current_status} cannot perform an "
+                "operation that requires status ACTIVE."
+            ),
+            translation=(
+                f"A conta com status {current_status} não pode executar uma "
+                "operação que exige o status ACTIVE."
+            ),
+        )
+
+
 class InvalidAccountTransition(QIException):
     code = "ACC0003"
 

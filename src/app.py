@@ -15,6 +15,7 @@ from resources import (
     ClientResource,
     HealthCheckResource,
     SampleEntityResource,
+    TransactionResource,
 )
 from utils.logger import setup_logging
 
@@ -133,6 +134,7 @@ def create_app() -> FastAPI:
     client_resource = ClientResource()
     client_analysis_resource = ClientAnalysisResource()
     account_resource = AccountResource()
+    transaction_resource = TransactionResource()
 
     application.add_api_route("/", health_check_resource.on_get_home, methods=["GET"])
     application.add_api_route(
@@ -201,6 +203,11 @@ def create_app() -> FastAPI:
         "/account/{account_key}",
         account_resource.on_patch_by_key,
         methods=["PATCH"],
+    )
+    application.add_api_route(
+        "/account/{account_key}/transaction",
+        transaction_resource.on_post,
+        methods=["POST"],
     )
 
     register_error_handlers(application)
