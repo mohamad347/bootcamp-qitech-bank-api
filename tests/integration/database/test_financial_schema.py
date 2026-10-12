@@ -3,12 +3,13 @@
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from tests.integration.database.assertions import (
     assert_columns_and_primary_key,
     assert_foreign_keys,
+    assert_index,
     assert_unique,
 )
 from tests.integration.database.builders import create_account, create_transaction, insert_entry
@@ -94,6 +95,36 @@ class TestTransactionEntrySchema:
                 ("account_id", "account", "id", "RESTRICT"),
             },
         )
+
+    @pytest.mark.parametrize(
+        ("index_name", "columns"),
+        [
+            ("idx_transaction_entry_account", ["account_id"]),
+            ("idx_transaction_entry_transaction", ["transaction_id"]),
+        ],
+    )
+    def test_statement_indexes_are_non_unique(
+        self,
+        schema_engine,
+        index_name,
+        columns,
+    ):
+        """O extrato localiza entries por conta e por transacao."""
+        assert_index(
+            schema_engine,
+            "transaction_entry",
+            index_name,
+            columns,
+        )
+        index = next(
+            item
+            for item in inspect(schema_engine).get_indexes(
+                "transaction_entry",
+                schema="public",
+            )
+            if item["name"] == index_name
+        )
+        assert index["unique"] is False
 
     def test_accepts_positive_credit(self, db_connection):
         """Crédito PRINCIPAL de valor positivo é persistível."""

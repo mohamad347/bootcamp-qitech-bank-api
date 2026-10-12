@@ -125,3 +125,9 @@ CREATE TABLE transaction_entry (
         CHECK (balance_after_cents >= 0),
     created_at TIMESTAMPTZ NOT NULL
 );
+
+CREATE INDEX idx_transaction_entry_account
+    ON transaction_entry (account_id);
+
+CREATE INDEX idx_transaction_entry_transaction
+    ON transaction_entry (transaction_id);
