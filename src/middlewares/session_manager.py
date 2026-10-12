@@ -1,6 +1,11 @@
 from fastapi import FastAPI, Request
 
 from database import clear_context, open_context
+from utils.database_errors import classify_database_timeout
+from utils.logger import get_logger
+
+
+logger = get_logger(__name__)
 
 
 def register_session_manager_middleware(application: FastAPI) -> None:
@@ -176,7 +181,7 @@ def register_session_manager_middleware(application: FastAPI) -> None:
 
         try:
             response = await call_next(request)
-        except Exception:
+        except Exception as exception:
             # Explodiu depois de a rota já ter mexido em alguma coisa: o
             # rascunho é rasgado aqui. Sem isto, a conexão voltaria pro
             # pool com uma transação abortada em cima dela, e a PRÓXIMA
@@ -188,8 +193,33 @@ def register_session_manager_middleware(application: FastAPI) -> None:
             # fica assim mesmo, dizendo a intenção em voz alta: o dia em
             # que alguém trocar o que vem depois, o combinado continua
             # escrito.
+            timeout = classify_database_timeout(exception)
+            route = request.scope.get("route")
+            operation = getattr(route, "path", None) or "request"
+            if timeout is not None:
+                logger.error(
+                    "database.timeout",
+                    extra={
+                        "event": "database.timeout",
+                        "timeout_type": timeout.timeout_type,
+                        "operation": operation,
+                        "exception_type": timeout.exception_type,
+                        "sqlstate": timeout.sqlstate,
+                    },
+                )
+
             if context.db_session is not None:
                 context.db_session.rollback()
+                if timeout is not None:
+                    logger.warning(
+                        "database.rollback",
+                        extra={
+                            "event": "database.rollback",
+                            "operation": operation,
+                            "reason_type": "timeout",
+                            "exception_type": timeout.exception_type,
+                        },
+                    )
             raise
         finally:
             # Sempre. Deu certo, deu 404, explodiu: a conexão volta pro

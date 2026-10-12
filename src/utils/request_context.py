@@ -1,6 +1,6 @@
 import re
 import uuid
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 
 
 # O nome do cabeçalho que carrega o identificador da requisição.
@@ -52,9 +52,14 @@ def get_request_id() -> str:
     return _request_id.get()
 
 
-def set_request_id(request_id: str) -> None:
+def set_request_id(request_id: str) -> Token:
     """Guarda o identificador desta requisição. Quem chama é o middleware."""
-    _request_id.set(request_id)
+    return _request_id.set(request_id)
+
+
+def reset_request_id(token: Token) -> None:
+    """Restore the context that existed before the current request."""
+    _request_id.reset(token)
 
 
 def build_request_id(received_request_id: str = None) -> str:

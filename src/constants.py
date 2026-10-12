@@ -14,6 +14,14 @@ SERVICE_NAME = os.environ.get("SERVICE_NAME", "bootcamp-api")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 INTERNAL_TOKEN = os.environ.get("INTERNAL_TOKEN")
 
+DB_CONNECT_TIMEOUT_SECONDS = int(
+    os.environ.get("DB_CONNECT_TIMEOUT_SECONDS", "5")
+)
+DB_LOCK_TIMEOUT_MS = int(os.environ.get("DB_LOCK_TIMEOUT_MS", "3000"))
+DB_STATEMENT_TIMEOUT_MS = int(
+    os.environ.get("DB_STATEMENT_TIMEOUT_MS", "10000")
+)
+
 # A API de boletos: o serviço de fora que este projeto chama pra emitir
 # uma cobrança (veja src/connectors/). O endereço vem do ambiente, como
 # tudo aqui — na sua máquina ele aponta pro mock server do sábado 4; em

@@ -11,12 +11,6 @@ from errors.base_error import (
     MethodNotAllowed,
     NotFoundResource,
 )
-from utils.logger import get_logger
-
-
-logger = get_logger(__name__)
-
-
 def qi_exception_to_response(exception: QIException) -> JSONResponse:
     """Traduz um erro nosso para a resposta JSON que o cliente recebe.
 
@@ -51,17 +45,20 @@ def register_error_handlers(application: FastAPI) -> None:
 
     @application.exception_handler(QIException)
     def handle_qi_exception(request: Request, exception: QIException) -> JSONResponse:
+        request.state.error_code = exception.code
         return qi_exception_to_response(exception)
 
     @application.exception_handler(StarletteHTTPException)
     def handle_http_exception(request: Request, exception: StarletteHTTPException) -> JSONResponse:
         if exception.status_code == 404:
+            request.state.error_code = NotFoundResource.code
             return qi_exception_to_response(NotFoundResource())
 
         if exception.status_code == 405:
+            request.state.error_code = MethodNotAllowed.code
             return qi_exception_to_response(MethodNotAllowed())
 
-        logger.error(f"HTTP {exception.status_code} em {request.url.path}: {exception.detail}")
+        request.state.error_code = InternalError.code
         return qi_exception_to_response(InternalError())
 
     @application.exception_handler(RequestValidationError)
@@ -91,11 +88,15 @@ def register_error_handlers(application: FastAPI) -> None:
         # para isso. O QIT000010 que o cliente ve hoje vem de outro
         # lugar: do controller, quando birthdate_from > birthdate_to.
         if origin in ("query", "path"):
-            return qi_exception_to_response(InvalidParameter(description))
+            error = InvalidParameter(description)
+            request.state.error_code = error.code
+            return qi_exception_to_response(error)
 
-        return qi_exception_to_response(InvalidSchema(description))
+        error = InvalidSchema(description)
+        request.state.error_code = error.code
+        return qi_exception_to_response(error)
 
     @application.exception_handler(Exception)
     def handle_unexpected_error(request: Request, exception: Exception) -> JSONResponse:
-        logger.exception(f"Erro inesperado em {request.method} {request.url.path}")
+        request.state.error_code = InternalError.code
         return qi_exception_to_response(InternalError())
