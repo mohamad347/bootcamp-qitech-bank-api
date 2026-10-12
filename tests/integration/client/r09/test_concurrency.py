@@ -44,6 +44,58 @@ def test_concurrent_r09_requests_create_exactly_one_transition(
     assert after["client_event_count"] == before["client_event_count"] + 1
 
 
+def test_concurrent_reanalysis_from_rejected_creates_one_pending_transition(
+    api_database_engine: Engine,
+) -> None:
+    client_key, _ = _create_client_in_status(api_database_engine, "REJECTED")
+    before = _snapshot(api_database_engine, client_key)
+    barrier = Barrier(3)
+
+    def request_reanalysis():
+        barrier.wait(timeout=5)
+        return _patch(client_key, "PENDING", "Reanálise concorrente")
+
+    with api_database_engine.connect() as lock_connection:
+        transaction = lock_connection.begin()
+        lock_connection.execute(
+            text(
+                """
+                SELECT id FROM client
+                WHERE client_key = CAST(:client_key AS uuid)
+                FOR UPDATE
+                """
+            ),
+            {"client_key": client_key},
+        ).scalar_one()
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(request_reanalysis) for _ in range(2)]
+            try:
+                barrier.wait(timeout=5)
+                _wait_for_blocked_request(lock_connection, "CLIENT/REANALYSIS")
+            finally:
+                if transaction.is_active:
+                    transaction.rollback()
+            responses = [future.result(timeout=10) for future in futures]
+
+    assert sorted(response.response_status for response in responses) == [200, 409]
+    success = next(response for response in responses if response.response_status == 200)
+    conflict = next(response for response in responses if response.response_status == 409)
+    assert success.response_json["status"] == "PENDING"
+    _assert_error(conflict, 409, "CLI0002")
+
+    after = _snapshot(api_database_engine, client_key)
+    events = _events(api_database_engine, client_key)
+    assert after["client_status"] == "PENDING"
+    assert after["client_event_count"] == before["client_event_count"] + 1
+    assert [(event["from_status"], event["to_status"]) for event in events[-1:]] == [
+        ("REJECTED", "PENDING")
+    ]
+    assert not any(
+        event["from_status"] == event["to_status"] == "PENDING"
+        for event in events
+    )
+
+
 @pytest.mark.parametrize("first_operation", ["R04", "R09"])
 def test_r09_and_r04_serialize_on_client_lock(
     api_database_engine: Engine,
