@@ -1,0 +1,27 @@
+{
+  "title": "GetAccountTransactions",
+  "type": "object",
+  "properties": {
+    "page": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "limit": {
+      "type": "string",
+      "pattern": "^(100|[1-9][0-9]?)$"
+    },
+    "order_by": {
+      "type": "string",
+      "enum": ["asc", "desc"]
+    },
+    "date_from": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "date_to": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    }
+  },
+  "additionalProperties": false
+}

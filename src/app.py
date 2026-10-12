@@ -209,6 +209,11 @@ def create_app() -> FastAPI:
         transaction_resource.on_post,
         methods=["POST"],
     )
+    application.add_api_route(
+        "/account/{account_key}/transactions",
+        transaction_resource.on_get_list,
+        methods=["GET"],
+    )
 
     register_error_handlers(application)
 

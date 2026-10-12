@@ -36,6 +36,36 @@ class TransactionController(BaseController):
         self.account_repository = AccountRepository(self.context)
         self.transaction_repository = TransactionRepository(self.context)
 
+    def get_statement(
+        self,
+        account_key: str,
+        page: int,
+        limit: int,
+        order_by: str,
+    ) -> dict:
+        try:
+            parsed_account_key = UUID(account_key)
+        except (AttributeError, TypeError, ValueError):
+            raise InvalidSchema("account_key must be a valid UUID") from None
+
+        account_result = self.account_repository.get_by_key(parsed_account_key)
+        if account_result is None:
+            raise AccountNotFound(str(parsed_account_key))
+
+        account, _ = account_result
+        entries = self.transaction_repository.list_statement_entries(
+            account_id=account.id,
+            offset=(page - 1) * limit,
+            limit=limit + 1,
+            order_by=order_by,
+        )
+        has_next = len(entries) > limit
+
+        return {
+            "data": [],
+            "next_page": page + 1 if has_next else None,
+        }
+
     def create(
         self,
         account_key: str,
