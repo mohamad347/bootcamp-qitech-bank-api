@@ -4,7 +4,7 @@
 
 O projeto implementa o ciclo bancário básico de uma plataforma parceira: cadastro de pessoas físicas (PF) e jurídicas (PJ), análise cadastral, abertura e gerenciamento de contas, depósitos, transferências e consulta de extrato. A solução prioriza **consistência financeira, integridade dos estados, idempotência, concorrência e rastreabilidade**, com desenvolvimento orientado a testes (**TDD — RED → GREEN → REFACTOR**).
 
-> **Entrega — 12/10/2026:** as **10 rotas (R01–R10)** estão integradas à `main`. A última regressão integrada informada pela equipe concluiu com **426 testes aprovados em 64,58 s**. Esses números registram uma execução validada, não uma promessa de resultado em qualquer ambiente.
+> **Entrega — 12/10/2026:** as **10 rotas (R01–R10)** estão integradas à `main`. A última regressão integrada informada pela equipe concluiu com **442 testes aprovados em 64,58 s**. Esses números registram uma execução validada, não uma promessa de resultado em qualquer ambiente.
 
 ## Quick start
 
@@ -195,7 +195,7 @@ Para executar somente os testes físicos do esquema:
 .\.venv\Scripts\python.exe -m pytest tests/integration/database -q
 ```
 
-**Última regressão integrada informada pela equipe:** `426 passed in 64.58s` (12/10/2026).
+**Última regressão integrada informada pela equipe:** `442 passed in 64.58s` (12/10/2026).
 
 **Isolamento:** o banco `bootcamp_test` destina-se aos testes de esquema, mas certos testes HTTP de integração podem criar **dados exclusivamente de teste** no banco local principal por meio da API. Não execute a suíte apontando a aplicação para um banco de produção ou com dados reais. Para parar somente o banco de testes:
 
