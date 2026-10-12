@@ -25,6 +25,8 @@ def register_internal_token_middleware(application: FastAPI) -> None:
             return await call_next(request)
 
         if request.headers.get("INTERNAL-TOKEN") != INTERNAL_TOKEN:
-            return qi_exception_to_response(ForbiddenNotInternal())
+            error = ForbiddenNotInternal()
+            request.state.error_code = error.code
+            return qi_exception_to_response(error)
 
         return await call_next(request)
