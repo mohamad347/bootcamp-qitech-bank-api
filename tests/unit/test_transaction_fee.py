@@ -1,13 +1,7 @@
 """Política pura de tarifa para transferências da R07."""
 
-import sys
-from pathlib import Path
-
 import pytest
 
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from controllers.transaction_fee import calculate_transfer_fee_cents
 

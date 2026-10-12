@@ -2,9 +2,9 @@
 
 API de **Banking as a Service (BaaS)** desenvolvida no **Bootcamp QI Tech 2026**. O projeto atende uma plataforma parceira por implantação e modela cadastro de clientes PF/PJ, análise cadastral, abertura e ciclo de vida de contas e movimentações em reais (BRL). O desenvolvimento segue **TDD (RED → GREEN → REFACTOR)**, com testes HTTP, integração com PostgreSQL real, concorrência e rollback.
 
-> **Estado do projeto — 12/10/2026:** **R01–R06, R09 e R10 estão implementadas e integradas à `main`**. A **R07 (transações)** está em desenvolvimento por outro integrante; a **R08 (extrato paginado)** será implementada em seguida. A auditoria de DTOs das R01–R04 preservou os contratos e introduziu somente a projeção pública da R02, onde havia ganho concreto.
+> **Estado do projeto — 12/10/2026:** **R01–R07, R09 e R10 estão implementadas e integradas à `main`**. A **R08 (extrato paginado)** permanece como próxima rota financeira. A auditoria de DTOs das R01–R04 preservou os contratos e introduziu somente a projeção pública da R02, onde havia ganho concreto.
 >
-> **Última regressão confirmada na `main`: 271 testes aprovados, 1 warning não bloqueante** (`MovedIn20Warning` do SQLAlchemy). Esta é uma fotografia da `main` antes da integração das R07/R08; não representa testes dessas duas rotas.
+> **Última regressão confirmada após a integração da R07 e a modularização completa da suíte:** `356 passed in 35.85s`. A R08 ainda não está integrada.
 
 ## Escopo do produto
 
@@ -22,12 +22,12 @@ O D0 opera no Brasil, em BRL, com uma plataforma parceira por implantação. **P
 | R04 | `POST /client/{client_key}/account` | **Implementada e validada** — abertura de conta |
 | R05 | `GET /account/{account_key}` | **Implementada e validada** — consulta de conta |
 | R06 | `PATCH /account/{account_key}` | **Implementada e validada** — ciclo de vida da conta |
-| R07 | `POST /account/{account_key}/transaction` | **Em desenvolvimento, fora da `main`** — depósito/transferência |
+| R07 | `POST /account/{account_key}/transaction` | **Implementada e validada** — depósito/transferência com idempotência |
 | R08 | `GET /account/{account_key}/transactions` | **Planejada, ainda não integrada** — extrato paginado |
 | R09 | `PATCH /client/{client_key}` | **Implementada e validada** — ciclo de vida do cliente |
 | R10 | `GET /health_check` | **Implementada e auditada** — `204 No Content`, pública, sem acesso SQL no caminho validado |
 
-**Atenção:** R07 e R08 constam do contrato, mas **não devem ser apresentadas como disponíveis na `main`** até terem seus respectivos PRs integrados e validados. As rotas de negócio usam `INTERNAL-TOKEN`; a R10 é pública.
+**Atenção:** a R08 consta do contrato, mas **não deve ser apresentada como disponível na `main`** até ter seu PR integrado e validado. As rotas de negócio usam `INTERNAL-TOKEN`; a R10 é pública.
 
 ### Comportamentos implementados relevantes
 
@@ -36,6 +36,7 @@ O D0 opera no Brasil, em BRL, com uma plataforma parceira por implantação. **P
 - **R04:** abertura de uma única conta por CLIENT `ACTIVE`, com restrição de unicidade no banco, evento inicial e proteção contra aberturas concorrentes.
 - **R05:** consulta por `account_key` com DTO público de resposta (`AccountDTO`).
 - **R06:** transições coordenadas de CLIENT e ACCOUNT com lock na ordem **CLIENT → ACCOUNT**, histórico e rollback atômico. O encerramento exige saldo zero.
+- **R07:** depósitos e transferências BRL com idempotência, validação de saldo, histórico financeiro e proteção de concorrência.
 - **R09:** mudanças diretas permitidas no CLIENT com lock pessimista e histórico; atualizações `ACTIVE ↔ INACTIVE` são rejeitadas se o CLIENT já possui ACCOUNT, inclusive `CLOSED`.
 - **R10:** `204` com corpo vazio, sem `INTERNAL-TOKEN`; os testes comprovam que o caminho instrumentado não adquire sessão ou conexão SQL.
 
@@ -130,7 +131,7 @@ O teste específico do healthcheck pode ser executado com:
 .\.venv\Scripts\python.exe -m pytest tests/integration/test_healthcheck.py -q
 ```
 
-**Última baseline validada após o merge da R10:** `271 passed, 1 warning`. O warning `MovedIn20Warning`, originado no import legado de `declarative_base()` em `src/models/base.py`, é conhecido e não bloqueante. A contagem mudará quando novos testes e R07/R08 forem integrados.
+**Última baseline validada após a integração da R07 e a modularização completa da suíte:** `356 passed in 35.85s`. A contagem mudará quando a R08 for integrada.
 
 Os testes HTTP das rotas de negócio podem gravar **registros exclusivos de teste** no banco principal `bootcamp` por meio da API. Eles não são automaticamente revertidos pelo banco `bootcamp_test`. Use o banco descartável exclusivamente para os testes de schema, como previsto na configuração do projeto; coordene execuções concorrentes com outras pessoas se compartilharem a instância.
 
@@ -171,7 +172,8 @@ A padronização de DTOs das R01–R04 está documentada em [`docs/R01_R04_Plano
 | `src/controllers/`, `src/repositories/` | Domínio, transações e persistência |
 | `src/models/`, `src/dtos/` | Modelos internos e projeções públicas |
 | `database/database.sql` | Bootstrap do PostgreSQL v1.1 |
-| `tests/integration/client/` | Testes de rotas e cenários bancários |
+| `tests/integration/client/` | Testes de rotas; R01–R06 e R09 ficam agrupadas por rota quando há múltiplos comportamentos |
+| `tests/integration/transaction/` | Testes financeiros da R07, já separados por comportamento |
 | `tests/integration/database/` | Testes do schema em banco descartável |
 | `tests/integration/test_healthcheck.py` | Contrato e isolamento da R10 |
 | `docker-compose.yml`, `compose.test.yml` | Serviços e banco de testes |
@@ -179,8 +181,10 @@ A padronização de DTOs das R01–R04 está documentada em [`docs/R01_R04_Plano
 
 `docs/pessoal/` contém anotações locais ignoradas pelo Git e não é necessária para seguir este README.
 
+Os módulos extensos da suíte foram divididos por comportamento. Helpers de banco, concorrência e fault injection permanecem em suportes locais de cada rota; nenhum arquivo Python em `tests/` ultrapassa 400 linhas.
+
 ## Colaboração e próximos passos
 
-O desenvolvimento ocorre em **branches independentes**, com PRs integradas à `main` somente após validação. No momento, um integrante desenvolve **R07**, depois seguirá com **R08**. Em paralelo, a **auditoria de DTOs de R01–R04** foi concluída, priorizando diferenças reais entre representação HTTP e domínio, sem alterações de locks, migrations, eventos ou contratos de respostas.
+O desenvolvimento ocorre em **branches independentes**, com PRs integradas à `main` somente após validação. A R07 já foi integrada; a próxima rota financeira é a **R08**. Em paralelo, a **auditoria de DTOs de R01–R04** foi concluída, priorizando diferenças reais entre representação HTTP e domínio, sem alterações de locks, migrations, eventos ou contratos de respostas.
 
-Após o merge de R07 e R08, a equipe fará **regressão integrada e auditoria das dez rotas**, incluindo contratos, DTOs, concorrência financeira, idempotência, segurança e documentação.
+Após o merge da R08, a equipe fará **regressão integrada e auditoria das dez rotas**, incluindo contratos, DTOs, concorrência financeira, idempotência, segurança e documentação.
