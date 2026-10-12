@@ -359,11 +359,23 @@ A ordem histórica aprovada para criação das entries é:
 
 Essa ordem é relevante porque, no extrato da conta de origem, `PRINCIPAL` deve permanecer antes de `FEE`.
 
-Tarifa do MVP:
+Tarifa da TRANSFER:
 
 ```text
-fee_cents = 200
+source INDIVIDUAL:
+rate_bps = 50
+minimum_fee_cents = 50
+maximum_fee_cents = 1000
+
+source COMPANY:
+rate_bps = 100
+minimum_fee_cents = 100
+maximum_fee_cents = 1500
 ```
+
+O percentual é arredondado em centavos por `HALF_UP` e depois limitado
+pelo piso e pelo teto do perfil. Somente o `client_type` do proprietário da
+source define o pricing; o tipo do target não participa do cálculo.
 
 A tarifa é calculada pelo servidor, paga pela origem e armazenada historicamente como `DEBIT / FEE`.
 

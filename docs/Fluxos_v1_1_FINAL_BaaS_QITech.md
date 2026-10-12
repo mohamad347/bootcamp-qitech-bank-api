@@ -773,7 +773,8 @@ Não é um full double-entry ledger.
 ## 3.2 Invariantes financeiras
 
 ```text
-amount_cents >= 1
+DEPOSIT: amount_cents >= 1
+TRANSFER: amount_cents >= 1000
 
 somente ACCOUNT ACTIVE executa nova movimentação
 
@@ -781,8 +782,8 @@ balance_cents nunca fica negativo
 
 TRANSFER:
 source != target
-fee_cents = 200
-source.balance_cents >= amount_cents + 200
+fee calculada pelo perfil da source, com piso, teto e HALF_UP
+source.balance_cents >= amount_cents + fee_cents
 
 DEPOSIT:
 fee_cents = 0
@@ -935,9 +936,12 @@ hash diferente
 
 Request:
 
+```text
+Header Idempotency-Key: UUID obrigatória
+```
+
 ```json
 {
-  "request_control_key": "...",
   "transaction_type": "DEPOSIT",
   "amount_cents": 10000
 }
@@ -1021,9 +1025,12 @@ fee_cents = 0
 
 Request:
 
+```text
+Header Idempotency-Key: UUID obrigatória
+```
+
 ```json
 {
-  "request_control_key": "...",
   "transaction_type": "TRANSFER",
   "amount_cents": 10000,
   "target_account_key": "..."
@@ -1051,7 +1058,7 @@ amount inteiro?
 ├── não -> 400
 └── sim
 ↓
-amount >= 1?
+amount >= 1000?
 ├── não -> 422 TRX0004
 └── sim
 ↓
@@ -1093,7 +1100,9 @@ alguma não ACTIVE?
 ├── sim -> 409 ACC0005 + ROLLBACK
 └── não
 ↓
-fee_cents = 200
+obter client_type da source
+↓
+calcular fee com rate/piso/teto e HALF_UP
 ↓
 source.balance >= amount + fee?
 ├── não -> 422 TRX0001 + ROLLBACK
@@ -1124,7 +1133,8 @@ Exemplo:
 source antes = 20000
 target antes = 5000
 amount = 10000
-fee = 200
+source client_type = INDIVIDUAL
+fee = 50
 ```
 
 Resultado:
@@ -1136,7 +1146,7 @@ balance_after = 10000
 
 Entry 2
 source DEBIT / FEE
-balance_after = 9800
+balance_after = 9950
 
 Entry 3
 target CREDIT / PRINCIPAL
@@ -1146,7 +1156,7 @@ balance_after = 15000
 Saldos finais:
 
 ```text
-source = 9800
+source = 9950
 target = 15000
 ```
 
@@ -1193,7 +1203,7 @@ ROLLBACK integral
 Condição:
 
 ```text
-source.balance_cents < amount_cents + 200
+source.balance_cents < amount_cents + fee_cents
 ```
 
 A checagem ocorre após os locks.
@@ -1276,16 +1286,10 @@ Saldo:
 15000
 ```
 
-A:
+A e B usam source `INDIVIDUAL`:
 
 ```text
-10000 + 200
-```
-
-B:
-
-```text
-10000 + 200
+10000 + 50
 ```
 
 Execução:
@@ -1295,11 +1299,11 @@ A obtém lock
 A relê 15000
 A executa
 A COMMIT
-saldo = 4800
+saldo = 4950
 
 B obtém lock
-B relê 4800
-4800 < 10200
+B relê 4950
+4950 < 10050
 B -> 422 TRX0001
 ```
 
@@ -1407,7 +1411,10 @@ DEPOSIT gera CREDIT / PRINCIPAL
 
 TRANSFER gera PRINCIPAL -> FEE -> crédito target
 
-fee_cents = 200
+fee depende somente do perfil da source
+INDIVIDUAL: 50 bps, mínimo 50, máximo 1000
+COMPANY: 100 bps, mínimo 100, máximo 1500
+arredondamento HALF_UP
 
 source cobre principal + fee
 
@@ -2091,7 +2098,7 @@ ACC0005
 -> ACCOUNT não ACTIVE para movimentação
 
 TRX0004
--> amount_cents < 1
+-> amount inválido, abaixo do mínimo da operação ou fora do limite técnico
 
 TRX0005
 -> date_from > date_to
@@ -2169,8 +2176,8 @@ atomicidade lifecycle + eventos        ✅
 ```text
 DEPOSIT                                ✅
 TRANSFER                               ✅
-amount >= 1                            ✅
-fee = 200                              ✅
+DEPOSIT >= 1 / TRANSFER >= 1000        ✅
+pricing PF/PJ + piso/teto + HALF_UP    ✅
 PRINCIPAL -> FEE -> target             ✅
 balance_after                          ✅
 saldo >= 0                             ✅

@@ -75,7 +75,7 @@ uma ACCOUNT por CLIENT durante toda a vida
 CLOSED terminal
 fechamento somente com balance_cents == 0
 BRL como moeda única do D0
-fee_cents = 200 em TRANSFER
+fee de TRANSFER por perfil da source, com piso, teto e HALF_UP
 ordem PRINCIPAL -> FEE -> crédito do destino
 request_control_key UNIQUE GLOBAL
 request_hash SHA-256
@@ -327,7 +327,7 @@ maior ACCOUNT.id
 | `TRX0001` | 422 | saldo insuficiente |
 | `TRX0002` | 409 | self-transfer |
 | `TRX0003` | 409 | conflito de idempotência |
-| `TRX0004` | 422 | `amount_cents < 1` |
+| `TRX0004` | 422 | amount inválido, abaixo do mínimo da operação ou fora do limite técnico |
 | `TRX0005` | 422 | intervalo de datas semanticamente inválido |
 
 ---
@@ -1097,6 +1097,7 @@ não
 ```text
 POST /account/{account_key}/transaction
 Auth: INTERNAL-TOKEN
+Idempotency-Key: UUID obrigatória
 ```
 
 Tipos:
@@ -1124,7 +1125,6 @@ Request:
 
 ```json
 {
-  "request_control_key": "...",
   "transaction_type": "DEPOSIT",
   "amount_cents": 10000
 }
@@ -1155,7 +1155,6 @@ Request:
 
 ```json
 {
-  "request_control_key": "...",
   "transaction_type": "TRANSFER",
   "amount_cents": 10000,
   "target_account_key": "..."
@@ -1178,6 +1177,12 @@ As duas contas precisam estar:
 ACTIVE
 ```
 
+Valor mínimo:
+
+```text
+amount_cents >= 1000
+```
+
 Self-transfer:
 
 ```text
@@ -1189,13 +1194,25 @@ Self-transfer:
 ## Tarifa
 
 ```text
-fee_cents = 200
+source INDIVIDUAL:
+rate_bps = 50
+minimum_fee_cents = 50
+maximum_fee_cents = 1000
+
+source COMPANY:
+rate_bps = 100
+minimum_fee_cents = 100
+maximum_fee_cents = 1500
 ```
+
+O percentual é arredondado por `HALF_UP`, com piso e teto aplicados em
+seguida. Somente o `client_type` da source define a política; o target não
+influencia o pricing.
 
 A source precisa ter:
 
 ```text
-balance_cents >= amount_cents + 200
+balance_cents >= amount_cents + fee_cents
 ```
 
 A tarifa é calculada pelo servidor.
@@ -1337,6 +1354,8 @@ ROLLBACK integral
 {
   "transaction_key": "...",
   "transaction_type": "DEPOSIT",
+  "account_key": "...",
+  "counterparty_account_key": null,
   "amount_cents": 10000,
   "fee_cents": 0,
   "created_at": "...Z"
@@ -1349,12 +1368,15 @@ ROLLBACK integral
 {
   "transaction_key": "...",
   "transaction_type": "TRANSFER",
-  "amount_cents": 10000,
-  "fee_cents": 200,
-  "target_account_key": "...",
+  "account_key": "<source_account_key>",
+  "counterparty_account_key": "<target_account_key>",
+  "amount_cents": 50000,
+  "fee_cents": 250,
   "created_at": "...Z"
 }
 ```
+
+O exemplo usa source `INDIVIDUAL`; `50000 × 50 / 10000 = 250` cents.
 
 ---
 
@@ -1367,7 +1389,7 @@ ROLLBACK integral
 409 ACC0005   -> conta envolvida não ACTIVE
 409 TRX0002   -> self-transfer
 409 TRX0003   -> conflito de idempotência
-422 TRX0004   -> amount_cents < 1
+422 TRX0004   -> amount inválido, abaixo do mínimo ou fora do limite técnico
 422 TRX0001   -> saldo insuficiente para amount + fee
 500 QIT000500 -> falha interna
 ```
@@ -2128,7 +2150,7 @@ R03 -> não
 R04 -> não
 R05 -> sim, GET
 R06 -> não
-R07 -> sim, request_control_key + request_hash
+R07 -> sim, Idempotency-Key + request_hash
 R08 -> sim, GET
 R09 -> não
 R10 -> sim, GET/liveness
