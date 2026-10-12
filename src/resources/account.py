@@ -14,3 +14,12 @@ class AccountResource:
             content=jsonable_encoder(account_response),
             status_code=http_status.HTTP_201_CREATED,
         )
+
+    def on_get_by_key(self, account_key: str) -> JSONResponse:
+        controller = AccountController()
+        account_response = controller.get_by_key(account_key)
+
+        return JSONResponse(
+            content=jsonable_encoder(account_response),
+            status_code=http_status.HTTP_200_OK,
+        )
