@@ -1,14 +1,7 @@
 from hashlib import sha256
-from pathlib import Path
-import sys
 from uuid import UUID, uuid4
 
-
-SRC_PATH = Path(__file__).resolve().parents[2] / "src"
-if str(SRC_PATH) not in sys.path:
-    sys.path.insert(0, str(SRC_PATH))
-
-from controllers.transaction_hash import (  # noqa: E402
+from controllers.transaction_hash import (
     build_deposit_request_hash,
     build_transfer_request_hash,
     canonicalize_deposit_request,
