@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -6,7 +6,7 @@ from psycopg2.errors import UniqueViolation
 from sqlalchemy.exc import IntegrityError
 
 from controllers.base_controller import BaseController
-from dtos import ClientPatchDTO
+from dtos import ClientDTO, ClientPatchDTO
 from errors import (
     ClientLifecycleRequiresAccount,
     ClientNotFound,
@@ -156,15 +156,7 @@ class ClientController(BaseController):
         if client is None:
             raise ClientNotFound(client_key)
 
-        response_data = {
-            "client_key": str(client.client_key),
-            "client_type": client.client_type,
-            "email": client.email,
-            "timezone": client.timezone,
-            "status": client.status.enumerator,
-            "created_at": self._as_utc_isoformat(client.created_at),
-            "updated_at": self._as_utc_isoformat(client.updated_at),
-        }
+        status = client.status.enumerator
 
         if client.client_type == "INDIVIDUAL":
             individual_client = self.client_repository.get_individual_by_client_id(
@@ -175,12 +167,10 @@ class ClientController(BaseController):
                     f"Individual profile for Client {client_key} was not found"
                 )
 
-            response_data.update(
-                {
-                    "cpf": individual_client.cpf,
-                    "full_name": individual_client.full_name,
-                    "birth_date": individual_client.birth_date.isoformat(),
-                }
+            return ClientDTO.individual_to_response(
+                client,
+                status,
+                individual_client,
             )
         elif client.client_type == "COMPANY":
             company_client = self.client_repository.get_company_by_client_id(
@@ -191,19 +181,15 @@ class ClientController(BaseController):
                     f"Company profile for Client {client_key} was not found"
                 )
 
-            response_data.update(
-                {
-                    "cnpj": company_client.cnpj,
-                    "legal_name": company_client.legal_name,
-                    "trade_name": company_client.trade_name,
-                }
+            return ClientDTO.company_to_response(
+                client,
+                status,
+                company_client,
             )
         else:
             raise RuntimeError(
                 f"Unsupported client type {client.client_type} for Client {client_key}"
             )
-
-        return response_data
 
     def update_status(self, client_key: str, payload: dict) -> dict:
         try:
@@ -263,10 +249,6 @@ class ClientController(BaseController):
         except Exception:
             self.session.rollback()
             raise
-
-    @staticmethod
-    def _as_utc_isoformat(value: datetime) -> str:
-        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
     @staticmethod
     def _only_digits(value: str) -> str:
