@@ -1,190 +1,206 @@
 # BaaS Simplificado
 
-API de **Banking as a Service (BaaS)** desenvolvida no **Bootcamp QI Tech 2026**. O projeto atende uma plataforma parceira por implantação e modela cadastro de clientes PF/PJ, análise cadastral, abertura e ciclo de vida de contas e movimentações em reais (BRL). O desenvolvimento segue **TDD (RED → GREEN → REFACTOR)**, com testes HTTP, integração com PostgreSQL real, concorrência e rollback.
+**API REST de Banking as a Service (BaaS)** desenvolvida para o **Bootcamp QI Tech 2026** por **João Vitor Miranda Sousa** e **Mohamad Ahmad Barakat**.
 
-> **Estado do projeto — 12/10/2026:** **R01–R07, R09 e R10 estão implementadas e integradas à `main`**. A **R08 (extrato paginado)** permanece como próxima rota financeira. A auditoria de DTOs das R01–R04 preservou os contratos e introduziu somente a projeção pública da R02, onde havia ganho concreto.
->
-> **Última regressão confirmada após a integração da R07 e a modularização completa da suíte:** `356 passed in 35.85s`. A R08 ainda não está integrada.
+O projeto implementa o ciclo bancário básico de uma plataforma parceira: cadastro de pessoas físicas (PF) e jurídicas (PJ), análise cadastral, abertura e gerenciamento de contas, depósitos, transferências e consulta de extrato. A solução prioriza **consistência financeira, integridade dos estados, idempotência, concorrência e rastreabilidade**, com desenvolvimento orientado a testes (**TDD — RED → GREEN → REFACTOR**).
 
-## Escopo do produto
+> **Entrega — 12/10/2026:** as **10 rotas (R01–R10)** estão integradas à `main`. A última regressão integrada informada pela equipe concluiu com **426 testes aprovados em 64,58 s**. Esses números registram uma execução validada, não uma promessa de resultado em qualquer ambiente.
 
-O fluxo do D0 começa no cadastro de clientes individuais e empresas, passa pela análise cadastral, abertura de uma única conta por cliente e prevê depósitos, transferências e consulta de extrato. O desenho inclui históricos de status, proteção contra saldo negativo, atomicidade das operações e tratamento de retentativas financeiras.
+## Documentação
 
-O D0 opera no Brasil, em BRL, com uma plataforma parceira por implantação. **PIX, TED, boleto, saque, KYC externo, múltiplas moedas e ledger contábil completo** estão fora do escopo. As decisões de produto e os seus motivos estão no [RFC](docs/RFC_v1_BaaS_Simplificado_QITech.md).
+| Documento | Finalidade |
+|---|---|
+| [RFC — Markdown](docs/RFC.md) | Contexto, solução proposta, decisões arquiteturais, rotas, modelo de dados e principais fluxos |
+| [RFC — PDF](docs/RFC.pdf) | Versão de apresentação da RFC, em A4 |
+| [Modelo de Dados — ERD](docs/ERD.md) | Entidades, relacionamentos, integridade referencial e decisões de persistência |
+| [Contratos da API — ROTAS](docs/ROTAS.md) | Headers, parâmetros, payloads, respostas, códigos HTTP e regras por endpoint |
+| [Fluxos de Negócio — FLUXOS](docs/FLUXOS.md) | Diagramas Mermaid de sucesso, falha, transações, concorrência e idempotência |
 
-## Estado das rotas
+**Modelo interativo:** [visualizar o ERD no dbdiagram.io](https://dbdiagram.io/d/ERD-bootcamp-QItech-6abc58be5869425612d24fa6). O esquema físico versionado encontra-se em [`database/database.sql`](database/database.sql).
 
-| Rota | Método e endpoint | Situação na `main` |
-| --- | --- | --- |
-| R01 | `POST /client` | **Implementada e validada** — cadastro PF/PJ |
-| R02 | `GET /client/{client_key}` | **Implementada e validada** — snapshot cadastral |
-| R03 | `POST /client/{client_key}/analysis` | **Implementada e validada** — análise cadastral |
-| R04 | `POST /client/{client_key}/account` | **Implementada e validada** — abertura de conta |
-| R05 | `GET /account/{account_key}` | **Implementada e validada** — consulta de conta |
-| R06 | `PATCH /account/{account_key}` | **Implementada e validada** — ciclo de vida da conta |
-| R07 | `POST /account/{account_key}/transaction` | **Implementada e validada** — depósito/transferência com idempotência |
-| R08 | `GET /account/{account_key}/transactions` | **Planejada, ainda não integrada** — extrato paginado |
-| R09 | `PATCH /client/{client_key}` | **Implementada e validada** — ciclo de vida do cliente |
-| R10 | `GET /health_check` | **Implementada e auditada** — `204 No Content`, pública, sem acesso SQL no caminho validado |
+## Funcionalidades e endpoints
 
-**Atenção:** a R08 consta do contrato, mas **não deve ser apresentada como disponível na `main`** até ter seu PR integrado e validado. As rotas de negócio usam `INTERNAL-TOKEN`; a R10 é pública.
+As operações de negócio exigem o header **`INTERNAL-TOKEN`**. A rota de healthcheck é pública.
 
-### Comportamentos implementados relevantes
+| ID | Método | Endpoint | Funcionalidade |
+|---|---|---|---|
+| R01 | `POST` | `/client` | Cadastro de cliente PF/PJ |
+| R02 | `GET` | `/client/{client_key}` | Consulta cadastral |
+| R03 | `POST` | `/client/{client_key}/analysis` | Análise cadastral por provedor externo simulado |
+| R04 | `POST` | `/client/{client_key}/account` | Abertura de conta |
+| R05 | `GET` | `/account/{account_key}` | Consulta de conta e saldo |
+| R06 | `PATCH` | `/account/{account_key}` | Alteração do estado da conta |
+| R07 | `POST` | `/account/{account_key}/transaction` | Depósito e transferência com idempotência |
+| R08 | `GET` | `/account/{account_key}/transactions` | Extrato paginado de lançamentos |
+| R09 | `PATCH` | `/client/{client_key}` | Alteração do estado cadastral |
+| R10 | `GET` | `/health_check` | Verificação de vida da API (`204`, sem autenticação) |
 
-- **R01–R02:** criação e consulta de clientes `INDIVIDUAL` e `COMPANY`. A R02 devolve apenas os campos públicos do snapshot e não expõe IDs internos, contas ou eventos.
-- **R03:** análise por provider simulado no ambiente de desenvolvimento/teste (MockServer), com revalidação do CLIENT sob `SELECT ... FOR UPDATE` após a chamada externa, sem manter lock durante o HTTP.
-- **R04:** abertura de uma única conta por CLIENT `ACTIVE`, com restrição de unicidade no banco, evento inicial e proteção contra aberturas concorrentes.
-- **R05:** consulta por `account_key` com DTO público de resposta (`AccountDTO`).
-- **R06:** transições coordenadas de CLIENT e ACCOUNT com lock na ordem **CLIENT → ACCOUNT**, histórico e rollback atômico. O encerramento exige saldo zero.
-- **R07:** depósitos e transferências BRL com idempotência, validação de saldo, histórico financeiro e proteção de concorrência.
-- **R09:** mudanças diretas permitidas no CLIENT com lock pessimista e histórico; atualizações `ACTIVE ↔ INACTIVE` são rejeitadas se o CLIENT já possui ACCOUNT, inclusive `CLOSED`.
-- **R10:** `204` com corpo vazio, sem `INTERNAL-TOKEN`; os testes comprovam que o caminho instrumentado não adquire sessão ou conexão SQL.
+Os contratos completos, com exemplos de requisição e resposta, estão em [`docs/ROTAS.md`](docs/ROTAS.md).
 
-## Arquitetura
+### Regras de negócio relevantes
 
-A aplicação utiliza **FastAPI**, **SQLAlchemy** e **PostgreSQL** e organiza a API em camadas:
+- **Clientes:** perfis `INDIVIDUAL` e `COMPANY`, documentos validados, cadastro inicial `PENDING` e histórico de mudanças de estado.
+- **Contas:** no máximo uma conta por cliente durante todo o ciclo de vida; abertura condicionada ao cliente elegível; saldo não negativo e encerramento somente com saldo zero.
+- **Análise cadastral:** integração HTTP com o provedor simulado no ambiente local; revalidação do estado do cliente após a resposta externa.
+- **Depósitos e transferências:** valores representados em **centavos de BRL**, com atualizações de saldo e lançamentos persistidos atomicamente.
+- **Tarifa de transferência:** calculada no servidor conforme o perfil da conta de origem. Para PF, **0,50%**, mínimo de **R$ 0,50** e máximo de **R$ 10,00**; para PJ, **1,00%**, mínimo de **R$ 1,00** e máximo de **R$ 15,00**, com arredondamento `HALF_UP`.
+- **Idempotência da R07:** header obrigatório `Idempotency-Key` (UUID), associado à intenção da operação. Retentativas idênticas não duplicam movimentações; reutilizações conflitantes são rejeitadas.
+- **Concorrência financeira:** locks pessimistas ordenados, validação de saldo sob lock e `COMMIT` único; falhas antes da confirmação provocam `ROLLBACK`.
+- **Extrato R08:** paginação por **lançamento** (`TRANSACTION_ENTRY`), incluindo principal e tarifa, ordenação determinística e filtros por datas civis interpretadas no timezone do cliente.
+
+O produto atende **uma plataforma parceira por implantação**, no Brasil e em **BRL**. PIX, TED, boletos, saques, KYC comercial real, multi-tenancy e contabilidade completa por partidas dobradas estão fora do escopo deste MVP.
+
+## Tecnologias e arquitetura
+
+| Componente | Tecnologia / responsabilidade |
+|---|---|
+| API | Python, FastAPI |
+| Persistência | PostgreSQL, SQLAlchemy |
+| Validação de entrada | JSON Schema |
+| Integração de análise | HTTP e MockServer no ambiente de desenvolvimento/testes |
+| Ambiente | Docker e Docker Compose |
+| Qualidade | pytest, testes unitários e de integração, TDD |
 
 ```text
-HTTP request
-    ↓
-app.py / middlewares (autenticação e contexto)
-    ↓
-resources + JSON Schema (transporte e validação de entrada)
-    ↓
-controllers (regras de negócio, orquestração e transação)
-    ↓
-repositories + models (consultas, locks e persistência)
-    ↓
-DTOs / projeção pública (quando úteis)
-    ↓
-HTTP response
+Requisição HTTP
+      |
+      v
+FastAPI / middlewares
+      |
+      v
+resources + validação JSON Schema
+      |
+      v
+controllers (regras de negócio e transações)
+      |
+      v
+repositories + models (PostgreSQL)
+      |
+      v
+DTOs / projeções de resposta, quando aplicáveis
+      |
+      v
+Resposta HTTP
 ```
 
-O projeto **já usa DTOs** nas R02 (`ClientDTO`), R03 (`ClientAnalysisDTO`), R05 (`AccountDTO`), R06 (`AccountPatchDTO`) e R09 (`ClientPatchDTO`). A auditoria das R01–R04 manteve os `dicts` simples de R01 e R04, porque não havia ganho concreto em novas classes. **JSON Schema valida a estrutura de entrada; DTOs, quando pertinentes, projetam dados públicos.** Nenhum DTO altera contratos HTTP ou invariantes de persistência. A R10 não necessita DTO porque retorna `204 No Content`.
+O banco possui **10 tabelas**, agrupadas em cadastro, contas e movimentações financeiras. Os históricos de mudança de estado são persistidos separadamente dos estados atuais, enquanto `financial_transaction` e `transaction_entry` registram as operações e seus efeitos. Consulte o [ERD](docs/ERD.md) para cardinalidades e restrições.
 
-As dez tabelas do schema v1.1 se distribuem em:
+## Executar localmente com Docker
 
-| Domínio | Tabelas |
-| --- | --- |
-| Cliente | `client_status`, `client`, `individual_client`, `company_client`, `client_status_event` |
-| Conta | `account_status`, `account`, `account_status_event` |
-| Financeiro | `financial_transaction`, `transaction_entry` |
+**Pré-requisitos:** Docker com Compose. Para executar a suíte de testes fora dos containers, também é necessário **Python 3.11 ou superior**.
 
-A definição física está em [`database/database.sql`](database/database.sql) e no [ERD v1.1](docs/ERD_v1_1_FINAL_BaaS_QITech.md). O projeto ainda não utiliza migrations. Endpoints e entidades de demonstração não pertencem ao contrato bancário nem ao bootstrap principal.
+Clone o repositório e entre na pasta do projeto:
 
-## Preparar o ambiente
+```powershell
+git clone https://github.com/mohamad347/bootcamp-qitech-bank-api.git
+cd bootcamp-qitech-bank-api
+```
 
-Pré-requisitos: **Docker com Compose** e **Python 3.11 ou superior** para executar os testes localmente.
+Se necessário, crie o arquivo de configuração local a partir do exemplo versionado:
 
-Na raiz do repositório:
+```powershell
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+```
+
+Inicie os serviços definidos no Compose principal:
 
 ```powershell
 docker compose up -d --build --wait
 docker compose ps
+```
+
+Verifique o funcionamento HTTP:
+
+```powershell
 curl.exe -i http://localhost:3000/health_check
 ```
 
-O último comando deve retornar **HTTP 204**, sem corpo. É um teste de *liveness* HTTP e **não** comprova a disponibilidade do PostgreSQL. Para acompanhar logs, use `docker compose logs -f api`; para parar sem apagar volumes, `docker compose stop`.
+**Resultado esperado:** `HTTP 204 No Content`, sem corpo. Esse endpoint verifica a resposta HTTP do processo, **não** a disponibilidade do PostgreSQL.
 
-O Compose principal executa `api`, `db` e, quando configurado na versão utilizada, `mockserver` para simular a integração da R03. Confira os serviços efetivos com `docker compose ps`. O bootstrap `database/database.sql` só é aplicado quando o diretório de dados do PostgreSQL é inicializado vazio; reiniciar/reconstruir o container não reaplica o SQL automaticamente.
+Para consultar logs ou parar os serviços sem remover volumes:
 
-Portas locais de referência: API `3000`, PostgreSQL principal `5432`, MockServer `1080` (quando ativo). Para personalizar configuração, copie [`.env.example`](.env.example) para `.env`. O `.env` é ignorado pelo Git. Valores padrão de usuário, senha e token são **somente para desenvolvimento local**.
+```powershell
+docker compose logs -f api
+docker compose stop
+```
 
-## Rodar os testes
+As portas locais de referência são **3000** (API), **5432** (PostgreSQL principal) e **1080** (MockServer, quando habilitado). Os valores de `.env.example` e as credenciais de desenvolvimento são destinados **somente ao ambiente local**. O script [`database/database.sql`](database/database.sql) inicializa o esquema no primeiro provisionamento de um volume PostgreSQL vazio; reconstruir um container não reinicializa automaticamente um volume persistente.
 
-Crie o ambiente virtual e instale dependências de desenvolvimento uma vez:
+## Executar os testes
+
+A suíte inclui testes de contrato HTTP, regras de domínio, persistência, estados, idempotência, concorrência, rollback, movimentações financeiras e extrato.
+
+### 1. Instalar as dependências de desenvolvimento (PowerShell)
 
 ```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 ```
 
-Em macOS/Linux, use `python3.11 -m venv .venv` e `.venv/bin/python`.
+No Linux/macOS, substitua a criação do ambiente por `python3.11 -m venv .venv` e utilize `.venv/bin/python` nos comandos seguintes.
 
-### PostgreSQL isolado dos testes de schema
+### 2. Subir o PostgreSQL isolado para testes de esquema
 
-**Atenção: a suíte de schema recria o schema `public` do banco de testes.** Nunca use a URL do PostgreSQL principal para esse procedimento.
+Os testes de esquema usam uma instância separada: **não aponte `TEST_DATABASE_URL` para o banco principal**.
 
 ```powershell
 $env:TEST_DB_PORT = "5433"
 docker compose -f compose.test.yml up -d --build --wait
 $env:TEST_DATABASE_URL = "postgresql+psycopg2://bootcamp:bootcamp@127.0.0.1:5433/bootcamp_test"
-.\.venv\Scripts\python.exe -m pytest tests/integration/database -q
 ```
 
-A porta **5433 é o exemplo usado nesta configuração**; escolha outra livre se necessário, definindo o mesmo número em `TEST_DB_PORT` e `TEST_DATABASE_URL`. A proteção de testes recusa o banco principal e exige banco de testes dedicado. **Não execute DROP, TRUNCATE ou reset de volumes no banco principal.**
+> **Cuidado:** os testes em `tests/integration/database/` podem recriar o schema `public` **do banco de testes**. Nunca utilize dados reais ou a URL do banco principal nessa configuração.
 
-### Testes HTTP e regressão completa
+### 3. Executar a regressão
 
-Com API, PostgreSQL principal, PostgreSQL de testes e MockServer necessários à suíte disponíveis:
+Com os serviços necessários disponíveis:
 
 ```powershell
 $env:SERVER_LOCALHOST = "127.0.0.1"
 $env:MOCKSERVER_URL = "http://127.0.0.1:1080"
 $env:TEST_DATABASE_URL = "postgresql+psycopg2://bootcamp:bootcamp@127.0.0.1:5433/bootcamp_test"
+
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-O teste específico do healthcheck pode ser executado com:
+Para executar somente os testes físicos do esquema:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/integration/test_healthcheck.py -q
+.\.venv\Scripts\python.exe -m pytest tests/integration/database -q
 ```
 
-**Última baseline validada após a integração da R07 e a modularização completa da suíte:** `356 passed in 35.85s`. A contagem mudará quando a R08 for integrada.
+**Última regressão integrada informada pela equipe:** `426 passed in 64.58s` (12/10/2026).
 
-Os testes HTTP das rotas de negócio podem gravar **registros exclusivos de teste** no banco principal `bootcamp` por meio da API. Eles não são automaticamente revertidos pelo banco `bootcamp_test`. Use o banco descartável exclusivamente para os testes de schema, como previsto na configuração do projeto; coordene execuções concorrentes com outras pessoas se compartilharem a instância.
-
-Para parar somente o PostgreSQL de testes:
+**Isolamento:** o banco `bootcamp_test` destina-se aos testes de esquema, mas certos testes HTTP de integração podem criar **dados exclusivamente de teste** no banco local principal por meio da API. Não execute a suíte apontando a aplicação para um banco de produção ou com dados reais. Para parar somente o banco de testes:
 
 ```powershell
 docker compose -f compose.test.yml stop db_test
 ```
 
-## Contratos e documentação
-
-A [especificação de Rotas v1.1](docs/Rotas_v1_1_FINAL_CONSOLIDADA_BaaS_QITech.md) define payloads, respostas, autenticação e erros. O [documento de Fluxos v1.1](docs/Fluxos_v1_1_FINAL_BaaS_QITech.md) cobre validações, atomicidade, eventos, locks e cenários de falha. A [especificação de implementação da R07](docs/Rotas_v1_1_FINAL_CONSOLIDADA_BaaS_QITech.md) não substitui decisões posteriores formalizadas pela equipe para a rota financeira: conflitos contratuais devem ser resolvidos antes do merge, sem atualizar silenciosamente contratos públicos.
-
-| Documento | Conteúdo |
-| --- | --- |
-| [RFC v1](docs/RFC_v1_BaaS_Simplificado_QITech.md) | Objetivo, decisões de produto e limitações do D0 |
-| [ERD v1.1](docs/ERD_v1_1_FINAL_BaaS_QITech.md) | Modelo físico e relacionamentos |
-| [Rotas v1.1](docs/Rotas_v1_1_FINAL_CONSOLIDADA_BaaS_QITech.md) | Contrato HTTP das R01–R10 |
-| [Fluxos v1.1](docs/Fluxos_v1_1_FINAL_BaaS_QITech.md) | Caminhos de sucesso, falhas e concorrência |
-| [Organização do projeto](docs/como-o-projeto-e-organizado.md) | Visão geral das camadas e do repositório (pode conter informações históricas) |
-| [Testes do schema](docs/Testes_do_Schema_v1_1.md) | Isolamento e testes físicos de banco |
-| [R02 — Plano](docs/R02_Plano_Completo_Testes_e_Implementacao.md) | Consulta de CLIENT |
-| [R03 — Testes por comportamento](tests/integration/client/r03/) | Análise externa e concorrência |
-| [R04 — Plano](docs/R04_Plano_Completo_Testes_e_Implementacao.md) | Abertura de ACCOUNT |
-| [R05 — Plano](docs/R05_Plano_Completo_Testes_e_Implementacao.md) | GET ACCOUNT e DTO |
-| [R06 — Plano](docs/R06_Plano_Completo_Testes_e_Implementacao.md) | Lifecycle coordenado de ACCOUNT |
-| [R09 — Plano](docs/R09_Plano_Completo_Testes_e_Implementacao.md) | Lifecycle de CLIENT |
-| [R10 — Plano](docs/R10_Plano_Completo_Testes_e_Implementacao.md) | Auditoria do healthcheck |
-
-A padronização de DTOs das R01–R04 está documentada em [`docs/R01_R04_Plano_Padronizacao_DTOs.md`](docs/R01_R04_Plano_Padronizacao_DTOs.md). Ela introduziu apenas o `ClientDTO` da R02 e não alterou R07/R08 nem contratos públicos.
-
 ## Estrutura do repositório
 
-| Caminho | Responsabilidade |
-| --- | --- |
-| `src/app.py`, `src/middlewares/` | Registro de rotas, autenticação e contexto |
-| `src/resources/`, `src/schemas/` | HTTP e validação de entrada |
-| `src/controllers/`, `src/repositories/` | Domínio, transações e persistência |
-| `src/models/`, `src/dtos/` | Modelos internos e projeções públicas |
-| `database/database.sql` | Bootstrap do PostgreSQL v1.1 |
-| `tests/integration/client/` | Testes de rotas; R01–R06 e R09 ficam agrupadas por rota quando há múltiplos comportamentos |
-| `tests/integration/transaction/` | Testes financeiros da R07, já separados por comportamento |
-| `tests/integration/database/` | Testes do schema em banco descartável |
-| `tests/integration/test_healthcheck.py` | Contrato e isolamento da R10 |
-| `docker-compose.yml`, `compose.test.yml` | Serviços e banco de testes |
-| `docs/` | Especificações, planos e evidências de TDD |
+```text
+bootcamp-qitech-bank-api/
+├── src/                       # API, regras de negócio e persistência
+├── database/
+│   └── database.sql           # Esquema PostgreSQL
+├── tests/                     # Testes unitários, HTTP, integração e banco
+├── docs/
+│   ├── RFC.md                 # RFC no formato original Markdown
+│   ├── RFC.pdf                # RFC para submissão
+│   ├── ERD.md                 # Modelo de dados e decisões de persistência
+│   ├── ROTAS.md               # Contratos HTTP
+│   └── FLUXOS.md              # Fluxos Mermaid e cenários de falha
+├── docker-compose.yml         # Ambiente principal
+├── compose.test.yml           # Banco isolado para testes de esquema
+├── requirements-dev.txt
+└── README.md
+```
 
-`docs/pessoal/` contém anotações locais ignoradas pelo Git e não é necessária para seguir este README.
+A documentação complementar descreve as decisões e os trade-offs arquiteturais com mais profundidade. **Para conhecer o projeto, comece pela [RFC](docs/RFC.md); para integrar a API, consulte [ROTAS](docs/ROTAS.md); para entender a persistência, veja o [ERD](docs/ERD.md) e os [FLUXOS](docs/FLUXOS.md).**
 
-Os módulos extensos da suíte foram divididos por comportamento. Helpers de banco, concorrência e fault injection permanecem em suportes locais de cada rota; nenhum arquivo Python em `tests/` ultrapassa 400 linhas.
+---
 
-## Colaboração e próximos passos
+**Autores:** João Vitor Miranda Sousa · Mohamad Ahmad Barakat
 
-O desenvolvimento ocorre em **branches independentes**, com PRs integradas à `main` somente após validação. A R07 já foi integrada; a próxima rota financeira é a **R08**. Em paralelo, a **auditoria de DTOs de R01–R04** foi concluída, priorizando diferenças reais entre representação HTTP e domínio, sem alterações de locks, migrations, eventos ou contratos de respostas.
-
-Após o merge da R08, a equipe fará **regressão integrada e auditoria das dez rotas**, incluindo contratos, DTOs, concorrência financeira, idempotência, segurança e documentação.
+**Projeto acadêmico:** Bootcamp QI Tech 2026 — BaaS Simplificado.
