@@ -1,6 +1,9 @@
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
+from psycopg2.errors import UniqueViolation
+from sqlalchemy.exc import IntegrityError
+
 from controllers.base_controller import BaseController
 from controllers.transaction_fee import calculate_transfer_fee_cents
 from controllers.transaction_hash import (
@@ -22,6 +25,9 @@ from repositories import AccountRepository, TransactionRepository
 
 
 BIGINT_MAX = 9_223_372_036_854_775_807
+IDEMPOTENCY_KEY_CONSTRAINT = (
+    "financial_transaction_request_control_key_key"
+)
 
 
 class TransactionController(BaseController):
@@ -70,15 +76,12 @@ class TransactionController(BaseController):
             )
 
         try:
-            existing_transaction = (
-                self.transaction_repository.get_by_request_control_key_with_entries(
-                    parsed_idempotency_key
-                )
+            existing_response = self._get_existing_response(
+                parsed_idempotency_key,
+                request_hash,
             )
-            if existing_transaction is not None:
-                if existing_transaction.request_hash == request_hash:
-                    return TransactionDTO.obj_to_response(existing_transaction)
-                raise IdempotencyKeyConflict()
+            if existing_response is not None:
+                return existing_response
 
             if (
                 transaction_type == FinancialTransaction.TRANSFER
@@ -97,21 +100,34 @@ class TransactionController(BaseController):
             ):
                 raise InvalidTransactionAmount()
 
-            if transaction_type == FinancialTransaction.DEPOSIT:
-                return self._create_deposit(
-                    account_key=parsed_account_key,
+            try:
+                if transaction_type == FinancialTransaction.DEPOSIT:
+                    return self._create_deposit(
+                        account_key=parsed_account_key,
+                        idempotency_key=parsed_idempotency_key,
+                        request_hash=request_hash,
+                        amount_cents=amount_cents,
+                    )
+
+                return self._create_transfer(
+                    source_account_key=parsed_account_key,
+                    target_account_key=parsed_target_account_key,
                     idempotency_key=parsed_idempotency_key,
                     request_hash=request_hash,
                     amount_cents=amount_cents,
                 )
+            except IntegrityError as error:
+                if not self._is_idempotency_key_collision(error):
+                    raise
 
-            return self._create_transfer(
-                source_account_key=parsed_account_key,
-                target_account_key=parsed_target_account_key,
-                idempotency_key=parsed_idempotency_key,
-                request_hash=request_hash,
-                amount_cents=amount_cents,
-            )
+                self.session.rollback()
+                winner_response = self._get_existing_response(
+                    parsed_idempotency_key,
+                    request_hash,
+                )
+                if winner_response is None:
+                    raise
+                return winner_response
         except Exception:
             self.session.rollback()
             raise
@@ -126,6 +142,15 @@ class TransactionController(BaseController):
         account = self.account_repository.get_by_key_for_update(account_key)
         if account is None:
             raise AccountNotFound(str(account_key))
+
+        replay_response = self._get_existing_response(
+            idempotency_key,
+            request_hash,
+        )
+        if replay_response is not None:
+            self.session.rollback()
+            return replay_response
+
         if account.status.enumerator != AccountStatus.ACTIVE:
             raise AccountNotActive(account.status.enumerator)
         if account.balance_cents > BIGINT_MAX - amount_cents:
@@ -182,6 +207,14 @@ class TransactionController(BaseController):
         }
         source_account = accounts_by_key[source_account_key]
         target_account = accounts_by_key[target_account_key]
+
+        replay_response = self._get_existing_response(
+            idempotency_key,
+            request_hash,
+        )
+        if replay_response is not None:
+            self.session.rollback()
+            return replay_response
 
         if source_account.status.enumerator != AccountStatus.ACTIVE:
             raise AccountNotActive(source_account.status.enumerator)
@@ -264,3 +297,27 @@ class TransactionController(BaseController):
             )
         )
         return TransactionDTO.obj_to_response(persisted_transaction)
+
+    def _get_existing_response(
+        self,
+        idempotency_key: UUID,
+        request_hash: str,
+    ) -> dict | None:
+        existing_transaction = (
+            self.transaction_repository.get_by_request_control_key_with_entries(
+                idempotency_key
+            )
+        )
+        if existing_transaction is None:
+            return None
+        if existing_transaction.request_hash != request_hash:
+            raise IdempotencyKeyConflict()
+        return TransactionDTO.obj_to_response(existing_transaction)
+
+    @staticmethod
+    def _is_idempotency_key_collision(error: IntegrityError) -> bool:
+        return (
+            isinstance(error.orig, UniqueViolation)
+            and error.orig.diag.constraint_name
+            == IDEMPOTENCY_KEY_CONSTRAINT
+        )
