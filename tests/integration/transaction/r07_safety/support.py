@@ -117,6 +117,70 @@ def _reject_transaction_at_commit(
             )
 
 
+@contextmanager
+def _timeout_transaction_at_commit(
+    engine: Engine,
+    idempotency_key: UUID,
+) -> Iterator[tuple[str, str]]:
+    """Wait on a locked row from a deferred trigger until lock_timeout."""
+    suffix = uuid4().hex
+    timeout_function = f"r07_timeout_commit_function_{suffix}"
+    timeout_trigger = f"r07_timeout_commit_trigger_{suffix}"
+
+    blocker = engine.connect()
+    blocker_transaction = blocker.begin()
+    status_id = blocker.execute(
+        text("SELECT id FROM client_status ORDER BY id LIMIT 1")
+    ).scalar_one()
+    blocker.execute(
+        text("SELECT id FROM client_status WHERE id = :id FOR UPDATE"),
+        {"id": status_id},
+    )
+
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            f"""
+            CREATE FUNCTION {timeout_function}() RETURNS trigger AS $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM financial_transaction
+                    WHERE id = NEW.transaction_id
+                      AND request_control_key = '{idempotency_key}'::uuid
+                ) THEN
+                    PERFORM 1
+                    FROM client_status
+                    WHERE id = {status_id}
+                    FOR UPDATE;
+                END IF;
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql
+            """
+        )
+        connection.exec_driver_sql(
+            f"""
+            CREATE CONSTRAINT TRIGGER {timeout_trigger}
+            AFTER INSERT ON transaction_entry
+            DEFERRABLE INITIALLY DEFERRED
+            FOR EACH ROW EXECUTE FUNCTION {timeout_function}()
+            """
+        )
+
+    try:
+        yield timeout_trigger, timeout_function
+    finally:
+        blocker_transaction.rollback()
+        blocker.close()
+        with engine.begin() as connection:
+            connection.exec_driver_sql(
+                f"DROP TRIGGER IF EXISTS {timeout_trigger} ON transaction_entry"
+            )
+            connection.exec_driver_sql(
+                f"DROP FUNCTION IF EXISTS {timeout_function}()"
+            )
+
+
 def _count_temporary_objects(
     engine: Engine,
     trigger_name: str,

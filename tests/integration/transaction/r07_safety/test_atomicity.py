@@ -202,3 +202,73 @@ def test_deposit_rolls_back_and_allows_retry_with_the_same_key(
     assert str(retry_state["transactions"][0]["transaction_key"]) == (
         retry_response.response_json["transaction_key"]
     )
+
+
+def test_lock_timeout_at_commit_rolls_back_transfer_and_releases_key(
+    api_database_engine: Engine,
+) -> None:
+    source_key = create_account(
+        api_database_engine,
+        balance_cents=100_000,
+    )
+    target_key = create_account(api_database_engine)
+    idempotency_key = uuid4()
+    initial_state = read_transfer_state(
+        api_database_engine,
+        source_key,
+        target_key,
+        idempotency_key,
+    )
+
+    with _timeout_transaction_at_commit(
+        api_database_engine,
+        idempotency_key,
+    ) as temporary_objects:
+        failed_response = send_transfer(
+            source_key,
+            target_key,
+            idempotency_key,
+        )
+
+    failed_state = read_transfer_state(
+        api_database_engine,
+        source_key,
+        target_key,
+        idempotency_key,
+    )
+    assert failed_response.response_status == 500
+    assert failed_response.response_json["code"] == "QIT000500"
+    assert failed_state["source"]["balance_cents"] == 100_000
+    assert failed_state["target"]["balance_cents"] == 0
+    assert failed_state["source"]["updated_at"] == initial_state["source"]["updated_at"]
+    assert failed_state["target"]["updated_at"] == initial_state["target"]["updated_at"]
+    assert failed_state["transactions"] == []
+    assert failed_state["entries"] == []
+    assert _count_entries_for_accounts(
+        api_database_engine,
+        source_key,
+        target_key,
+    ) == 0
+    assert _count_temporary_objects(
+        api_database_engine,
+        temporary_objects[0],
+        temporary_objects[1],
+    ) == 0
+
+    retry_response = send_transfer(
+        source_key,
+        target_key,
+        idempotency_key,
+    )
+    retry_state = read_transfer_state(
+        api_database_engine,
+        source_key,
+        target_key,
+        idempotency_key,
+    )
+    assert retry_response.response_status == 201
+    assert retry_state["source"]["balance_cents"] == 49_750
+    assert retry_state["target"]["balance_cents"] == 50_000
+    assert len(retry_state["transactions"]) == 1
+    assert len(retry_state["entries"]) == 3
+    assert retry_state["transactions"][0]["request_control_key"] == idempotency_key

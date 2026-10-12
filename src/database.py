@@ -98,16 +98,36 @@ from typing import Optional
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from constants import DATABASE_URL
-
-
-engine = create_engine(
+from constants import (
     DATABASE_URL,
-    pool_size=5,
-    pool_recycle=600,
-    pool_pre_ping=True,
-    hide_parameters=True,
+    DB_CONNECT_TIMEOUT_SECONDS,
+    DB_LOCK_TIMEOUT_MS,
+    DB_STATEMENT_TIMEOUT_MS,
 )
+
+
+def database_connect_args() -> dict:
+    return {
+        "connect_timeout": DB_CONNECT_TIMEOUT_SECONDS,
+        "options": (
+            f"-c lock_timeout={DB_LOCK_TIMEOUT_MS}ms "
+            f"-c statement_timeout={DB_STATEMENT_TIMEOUT_MS}ms"
+        ),
+    }
+
+
+def create_database_engine(database_url: str):
+    return create_engine(
+        database_url,
+        pool_size=5,
+        pool_recycle=600,
+        pool_pre_ping=True,
+        hide_parameters=True,
+        connect_args=database_connect_args(),
+    )
+
+
+engine = create_database_engine(DATABASE_URL)
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False)
 
