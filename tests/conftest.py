@@ -17,7 +17,7 @@ if str(src_root) not in sys.path:
 for name, value in {
     "DATABASE_URL": "postgresql+psycopg2://bootcamp:bootcamp@127.0.0.1:55433/bootcamp",
     "TEST_DATABASE_URL": (
-        "postgresql+psycopg2://bootcamp:bootcamp@127.0.0.1:55432/bootcamp_schema_test"
+        "postgresql+psycopg2://bootcamp:bootcamp@127.0.0.1:55432/bootcamp_test"
     ),
     "INTERNAL_TOKEN": "default_token",
     "ANALYSIS_PROVIDER_URL": "http://127.0.0.1:1081",
