@@ -192,6 +192,11 @@ def create_app() -> FastAPI:
         account_resource.on_get_by_key,
         methods=["GET"],
     )
+    application.add_api_route(
+        "/account/{account_key}",
+        account_resource.on_patch_by_key,
+        methods=["PATCH"],
+    )
 
     register_error_handlers(application)
 
