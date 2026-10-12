@@ -1,0 +1,39 @@
+[
+  {
+    "id": "manual-reject",
+    "priority": 100,
+    "httpRequest": {
+      "method": "POST",
+      "path": "/v1/client-analysis",
+      "body": {
+        "type": "JSON",
+        "json": {
+          "document": "16899535009"
+        },
+        "matchType": "ONLY_MATCHING_FIELDS"
+      }
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": "{\"decision\":\"REJECT\",\"reason\":\"Dados cadastrais não atendem aos critérios da análise.\"}"
+    }
+  },
+  {
+    "id": "manual-approve",
+    "priority": -100,
+    "httpRequest": {
+      "method": "POST",
+      "path": "/v1/client-analysis"
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": "{\"decision\":\"APPROVE\",\"reason\":null}"
+    }
+  }
+]

@@ -15,11 +15,11 @@ RESET_QUERIES = [
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_FILE = PROJECT_ROOT / "database" / "database.sql"
 
-DEFAULT_DATABASE_URL = "postgresql+psycopg2://bootcamp:bootcamp@localhost:5432/bootcamp"
+DEFAULT_DATABASE_URL = "postgresql+psycopg2://bootcamp:bootcamp@localhost:55433/bootcamp"
 
 DATABASE_OFFLINE = (
     "Não consegui falar com o banco em {host}:{port}.\n"
-    "Suba o banco de teste com: docker compose -f compose.test.yml up -d --wait\n"
+    "Suba a stack isolada de teste com: docker compose up -d --build --wait\n"
     "Confira a porta configurada em TEST_DATABASE_URL."
 )
 
