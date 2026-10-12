@@ -25,3 +25,13 @@ class ClientResource:
             content=jsonable_encoder(client_response),
             status_code=http_status.HTTP_200_OK,
         )
+
+    @SchemaHandler.validate("patch_client.json")
+    def on_patch_by_key(self, client_key: str, payload: dict) -> JSONResponse:
+        controller = ClientController()
+        client_response = controller.update_status(client_key, payload)
+
+        return JSONResponse(
+            content=jsonable_encoder(client_response),
+            status_code=http_status.HTTP_200_OK,
+        )

@@ -1,0 +1,15 @@
+{
+    "title": "PatchClient",
+    "type": "object",
+    "properties": {
+        "status": {
+            "type": "string",
+            "enum": ["PENDING", "ACTIVE", "REJECTED", "INACTIVE"]
+        },
+        "reason": {
+            "type": "string"
+        }
+    },
+    "required": ["status", "reason"],
+    "additionalProperties": false
+}

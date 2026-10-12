@@ -183,6 +183,11 @@ def create_app() -> FastAPI:
         methods=["GET"],
     )
     application.add_api_route(
+        "/client/{client_key}",
+        client_resource.on_patch_by_key,
+        methods=["PATCH"],
+    )
+    application.add_api_route(
         "/client/{client_key}/account",
         account_resource.on_post_for_client,
         methods=["POST"],

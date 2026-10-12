@@ -1,8 +1,11 @@
 from datetime import date, datetime, timezone
 from uuid import UUID, uuid4
 
+from sqlalchemy.orm import lazyload
+
 from database import Context
 from models import (
+    Account,
     Client,
     ClientStatus,
     ClientStatusEvent,
@@ -42,6 +45,53 @@ class ClientRepository:
             .filter(Client.client_key == client_key)
             .one_or_none()
         )
+
+    def get_by_key_for_update(self, client_key: UUID) -> Client | None:
+        return (
+            self.session.query(Client)
+            .options(lazyload(Client.status))
+            .filter(Client.client_key == client_key)
+            .populate_existing()
+            .with_for_update(of=Client)
+            .one_or_none()
+        )
+
+    def get_status_by_id(self, status_id: int) -> ClientStatus | None:
+        return (
+            self.session.query(ClientStatus)
+            .filter(ClientStatus.id == status_id)
+            .one_or_none()
+        )
+
+    def has_account(self, client_id: int) -> bool:
+        return (
+            self.session.query(Account.id)
+            .filter(Account.client_id == client_id)
+            .first()
+            is not None
+        )
+
+    def apply_status_change(
+        self,
+        client: Client,
+        from_status: ClientStatus,
+        to_status: ClientStatus,
+        reason: str,
+    ) -> ClientStatusEvent:
+        changed_at = datetime.now(timezone.utc)
+        client.status_id = to_status.id
+        client.updated_at = changed_at
+
+        event = ClientStatusEvent(
+            client_id=client.id,
+            from_status_id=from_status.id,
+            to_status_id=to_status.id,
+            actor_type=ClientStatusEvent.INTERNAL,
+            reason=reason,
+            created_at=changed_at,
+        )
+        self.session.add(event)
+        return event
 
     def get_individual_by_client_id(
         self, client_id: int
