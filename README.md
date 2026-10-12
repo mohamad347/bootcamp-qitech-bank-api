@@ -6,6 +6,32 @@ O projeto implementa o ciclo bancário básico de uma plataforma parceira: cadas
 
 > **Entrega — 12/10/2026:** as **10 rotas (R01–R10)** estão integradas à `main`. A última regressão integrada informada pela equipe concluiu com **426 testes aprovados em 64,58 s**. Esses números registram uma execução validada, não uma promessa de resultado em qualquer ambiente.
 
+## Quick start
+
+### Inicialização
+
+Pré-requisito: **somente Docker com Compose**. Para iniciar o projeto desde um clone novo:
+
+```bash
+git clone https://github.com/mohamad347/bootcamp-qitech-bank-api.git
+cd bootcamp-qitech-bank-api
+docker compose up -d --build --wait
+curl -i http://localhost:3000/health_check
+```
+
+Não é necessário exportar variáveis, instalar PostgreSQL no host, executar SQL
+ou configurar o MockServer. Se o repositório já estiver clonado, basta entrar
+na pasta e executar:
+
+```bash
+docker compose up -d --build --wait
+curl -i http://localhost:3000/health_check
+```
+
+O health check retorna **HTTP 204**. A API fica disponível em `http://localhost:3000` e o token local de demonstração é `default_token`, enviado no header `INTERNAL-TOKEN`.
+
+O Compose cria automaticamente o schema de um volume novo a partir de `database/database.sql`, incluindo os índices da R08, e sobe o PostgreSQL e o Analysis Provider necessários.
+
 ## Documentação
 
 | Documento | Finalidade |
