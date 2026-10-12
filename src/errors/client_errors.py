@@ -10,7 +10,7 @@ class ClientNotFound(QIException):
             code=self.code,
             http_status=404,
             description=f"Client with key {client_key} was not found.",
-            translation=f"O cliente com a chave {client_key} não foi encontrado.",
+            translation="O cliente informado não foi encontrado.",
         )
 
 

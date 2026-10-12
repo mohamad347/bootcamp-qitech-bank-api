@@ -1,4 +1,5 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from psycopg2.errors import UniqueViolation
@@ -6,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from controllers.base_controller import BaseController
 from errors import (
+    ClientNotFound,
     DuplicateClientCPF,
     DuplicateClientCNPJ,
     DuplicateClientEmail,
@@ -137,6 +139,71 @@ class ClientController(BaseController):
             raise
 
         return response_data
+
+    def get_by_key(self, client_key: str) -> dict:
+        self.logger.debug(f"Buscando o Client de chave {client_key}")
+
+        try:
+            parsed_client_key = UUID(client_key)
+        except ValueError:
+            raise InvalidSchema("client_key must be a valid UUID") from None
+
+        client = self.client_repository.get_by_key(parsed_client_key)
+        if client is None:
+            raise ClientNotFound(client_key)
+
+        response_data = {
+            "client_key": str(client.client_key),
+            "client_type": client.client_type,
+            "email": client.email,
+            "timezone": client.timezone,
+            "status": client.status.enumerator,
+            "created_at": self._as_utc_isoformat(client.created_at),
+            "updated_at": self._as_utc_isoformat(client.updated_at),
+        }
+
+        if client.client_type == "INDIVIDUAL":
+            individual_client = self.client_repository.get_individual_by_client_id(
+                client.id
+            )
+            if individual_client is None:
+                raise RuntimeError(
+                    f"Individual profile for Client {client_key} was not found"
+                )
+
+            response_data.update(
+                {
+                    "cpf": individual_client.cpf,
+                    "full_name": individual_client.full_name,
+                    "birth_date": individual_client.birth_date.isoformat(),
+                }
+            )
+        elif client.client_type == "COMPANY":
+            company_client = self.client_repository.get_company_by_client_id(
+                client.id
+            )
+            if company_client is None:
+                raise RuntimeError(
+                    f"Company profile for Client {client_key} was not found"
+                )
+
+            response_data.update(
+                {
+                    "cnpj": company_client.cnpj,
+                    "legal_name": company_client.legal_name,
+                    "trade_name": company_client.trade_name,
+                }
+            )
+        else:
+            raise RuntimeError(
+                f"Unsupported client type {client.client_type} for Client {client_key}"
+            )
+
+        return response_data
+
+    @staticmethod
+    def _as_utc_isoformat(value: datetime) -> str:
+        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
     @staticmethod
     def _only_digits(value: str) -> str:
