@@ -1,5 +1,6 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 from psycopg2.errors import UniqueViolation
 from sqlalchemy.exc import IntegrityError
@@ -18,6 +19,7 @@ from errors import (
     InsufficientBalance,
     InvalidSchema,
     InvalidTransactionAmount,
+    InvalidTransactionDateRange,
     SelfTransferNotAllowed,
 )
 from models import AccountStatus, FinancialTransaction, TransactionEntry
@@ -42,22 +44,56 @@ class TransactionController(BaseController):
         page: int,
         limit: int,
         order_by: str,
+        date_from: str | None = None,
+        date_to: str | None = None,
     ) -> dict:
         try:
             parsed_account_key = UUID(account_key)
         except (AttributeError, TypeError, ValueError):
             raise InvalidSchema("account_key must be a valid UUID") from None
 
-        account_result = self.account_repository.get_by_key(parsed_account_key)
+        parsed_date_from = self._parse_statement_date(date_from, "date_from")
+        parsed_date_to = self._parse_statement_date(date_to, "date_to")
+        if (
+            parsed_date_from is not None
+            and parsed_date_to is not None
+            and parsed_date_from > parsed_date_to
+        ):
+            raise InvalidTransactionDateRange()
+
+        account_result = self.account_repository.get_by_key_with_timezone(
+            parsed_account_key
+        )
         if account_result is None:
             raise AccountNotFound(str(parsed_account_key))
 
-        account, _ = account_result
+        account, client_timezone_name = account_result
+        client_timezone = ZoneInfo(client_timezone_name)
+        lower_bound_utc = (
+            datetime.combine(
+                parsed_date_from,
+                time.min,
+                tzinfo=client_timezone,
+            ).astimezone(timezone.utc)
+            if parsed_date_from is not None
+            else None
+        )
+        upper_bound_utc = (
+            datetime.combine(
+                parsed_date_to + timedelta(days=1),
+                time.min,
+                tzinfo=client_timezone,
+            ).astimezone(timezone.utc)
+            if parsed_date_to is not None
+            else None
+        )
         entries = self.transaction_repository.list_statement_entries(
             account_id=account.id,
             offset=(page - 1) * limit,
             limit=limit + 1,
             order_by=order_by,
+            lower_bound_utc=lower_bound_utc,
+            upper_bound_utc=upper_bound_utc,
         )
         has_next = len(entries) > limit
 
@@ -68,6 +104,15 @@ class TransactionController(BaseController):
             ],
             "next_page": page + 1 if has_next else None,
         }
+
+    @staticmethod
+    def _parse_statement_date(value: str | None, field_name: str) -> date | None:
+        if value is None:
+            return None
+        try:
+            return date.fromisoformat(value)
+        except ValueError:
+            raise InvalidSchema(f"{field_name} must be a valid date") from None
 
     def create(
         self,

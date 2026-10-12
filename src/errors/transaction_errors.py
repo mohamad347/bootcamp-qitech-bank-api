@@ -72,3 +72,18 @@ class InvalidTransactionAmount(QIException):
                 "permitido."
             ),
         )
+
+
+class InvalidTransactionDateRange(QIException):
+    code = "TRX0005"
+
+    def __init__(self) -> None:
+        super().__init__(
+            title="Invalid transaction date range",
+            code=self.code,
+            http_status=422,
+            description="date_from must be less than or equal to date_to.",
+            translation=(
+                "date_from deve ser anterior ou igual a date_to."
+            ),
+        )

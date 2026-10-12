@@ -62,6 +62,8 @@ class TransactionResource:
             page=page,
             limit=limit,
             order_by=order_by,
+            date_from=query_params.get("date_from"),
+            date_to=query_params.get("date_to"),
         )
         response = {
             "data": statement_page["data"],

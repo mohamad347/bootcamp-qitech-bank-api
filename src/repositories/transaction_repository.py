@@ -58,6 +58,8 @@ class TransactionRepository:
         offset: int,
         limit: int,
         order_by: str,
+        lower_bound_utc: datetime | None = None,
+        upper_bound_utc: datetime | None = None,
     ) -> list[TransactionEntry]:
         query = (
             self.session.query(TransactionEntry)
@@ -72,6 +74,15 @@ class TransactionRepository:
             )
             .filter(TransactionEntry.account_id == account_id)
         )
+
+        if lower_bound_utc is not None:
+            query = query.filter(
+                FinancialTransaction.created_at >= lower_bound_utc
+            )
+        if upper_bound_utc is not None:
+            query = query.filter(
+                FinancialTransaction.created_at < upper_bound_utc
+            )
 
         if order_by == "asc":
             query = query.order_by(

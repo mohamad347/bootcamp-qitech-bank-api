@@ -51,6 +51,17 @@ class AccountRepository:
             .one_or_none()
         )
 
+    def get_by_key_with_timezone(
+        self,
+        account_key: UUID,
+    ) -> tuple[Account, str] | None:
+        return (
+            self.session.query(Account, Client.timezone)
+            .join(Client, Client.id == Account.client_id)
+            .filter(Account.account_key == account_key)
+            .one_or_none()
+        )
+
     def get_by_key_for_update(self, account_key: UUID) -> Account | None:
         return (
             self.session.query(Account)
