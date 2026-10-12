@@ -577,27 +577,32 @@ def _wait_for_client_lock_wait(
     client_key: str,
 ) -> None:
     """Confirma que a request concorrente alcançou o lock da linha CLIENT."""
+    blocker_pid = connection.execute(
+        text("SELECT pg_backend_pid()")
+    ).scalar_one()
     deadline = monotonic() + 5
     while monotonic() < deadline:
+        connection.execute(text("SELECT pg_stat_clear_snapshot()"))
         waiting_connections = connection.execute(
             text(
                 """
                 SELECT COUNT(*)
-                FROM pg_stat_activity
-                WHERE datname = current_database()
-                  AND pid <> pg_backend_pid()
-                  AND wait_event_type = 'Lock'
-                  AND query LIKE '%FOR UPDATE OF client%'
-                  AND query LIKE '%client%'
+                FROM pg_stat_activity AS activity
+                WHERE activity.datname = current_database()
+                  AND activity.pid <> pg_backend_pid()
+                  AND activity.wait_event_type = 'Lock'
+                  AND :blocker_pid = ANY(pg_blocking_pids(activity.pid))
                 """
-            )
+            ),
+            {"blocker_pid": blocker_pid},
         ).scalar_one()
         if waiting_connections >= 1:
             return
         sleep(0.01)
 
     raise AssertionError(
-        f"Nenhuma request ficou bloqueada no CLIENT {client_key} durante o teste"
+        "Nenhuma request ficou bloqueada pelo backend "
+        f"{blocker_pid} no CLIENT {client_key} durante o teste"
     )
 
 
