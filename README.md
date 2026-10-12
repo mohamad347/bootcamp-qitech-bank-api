@@ -2,9 +2,9 @@
 
 API de **Banking as a Service (BaaS)** desenvolvida no **Bootcamp QI Tech 2026**. O projeto atende uma plataforma parceira por implantação e modela cadastro de clientes PF/PJ, análise cadastral, abertura e ciclo de vida de contas e movimentações em reais (BRL). O desenvolvimento segue **TDD (RED → GREEN → REFACTOR)**, com testes HTTP, integração com PostgreSQL real, concorrência e rollback.
 
-> **Estado do projeto — 12/10/2026:** **R01–R07, R09 e R10 estão implementadas e integradas à `main`**. A **R08 (extrato paginado)** permanece como próxima rota financeira. A auditoria de DTOs das R01–R04 preservou os contratos e introduziu somente a projeção pública da R02, onde havia ganho concreto.
+> **Estado do projeto — 12/10/2026:** **R01–R10 estão implementadas e integradas à `main`**. A auditoria de DTOs das R01–R04 preservou os contratos e introduziu somente a projeção pública da R02, onde havia ganho concreto.
 >
-> **Última regressão confirmada após a integração da R07 e a modularização completa da suíte:** `356 passed in 35.85s`. A R08 ainda não está integrada.
+> **Última regressão confirmada nesta preparação do ambiente de avaliação:** `442 passed in 24.16s`, repetida sobre os mesmos volumes sem exports manuais.
 
 ## Escopo do produto
 
@@ -23,11 +23,11 @@ O D0 opera no Brasil, em BRL, com uma plataforma parceira por implantação. **P
 | R05 | `GET /account/{account_key}` | **Implementada e validada** — consulta de conta |
 | R06 | `PATCH /account/{account_key}` | **Implementada e validada** — ciclo de vida da conta |
 | R07 | `POST /account/{account_key}/transaction` | **Implementada e validada** — depósito/transferência com idempotência |
-| R08 | `GET /account/{account_key}/transactions` | **Planejada, ainda não integrada** — extrato paginado |
+| R08 | `GET /account/{account_key}/transactions` | **Implementada e validada** — extrato paginado por entry |
 | R09 | `PATCH /client/{client_key}` | **Implementada e validada** — ciclo de vida do cliente |
 | R10 | `GET /health_check` | **Implementada e auditada** — `204 No Content`, pública, sem acesso SQL no caminho validado |
 
-**Atenção:** a R08 consta do contrato, mas **não deve ser apresentada como disponível na `main`** até ter seu PR integrado e validado. As rotas de negócio usam `INTERNAL-TOKEN`; a R10 é pública.
+As rotas de negócio usam `INTERNAL-TOKEN`; a R10 é pública.
 
 ### Comportamentos implementados relevantes
 
@@ -37,6 +37,7 @@ O D0 opera no Brasil, em BRL, com uma plataforma parceira por implantação. **P
 - **R05:** consulta por `account_key` com DTO público de resposta (`AccountDTO`).
 - **R06:** transições coordenadas de CLIENT e ACCOUNT com lock na ordem **CLIENT → ACCOUNT**, histórico e rollback atômico. O encerramento exige saldo zero.
 - **R07:** depósitos e transferências BRL com idempotência, validação de saldo, histórico financeiro e proteção de concorrência.
+- **R08:** extrato paginado por `transaction_entry`, com ordenação determinística, filtros civis no timezone do cliente e carregamento sem N+1.
 - **R09:** mudanças diretas permitidas no CLIENT com lock pessimista e histórico; atualizações `ACTIVE ↔ INACTIVE` são rejeitadas se o CLIENT já possui ACCOUNT, inclusive `CLOSED`.
 - **R10:** `204` com corpo vazio, sem `INTERNAL-TOKEN`; os testes comprovam que o caminho instrumentado não adquire sessão ou conexão SQL.
 
@@ -60,7 +61,7 @@ DTOs / projeção pública (quando úteis)
 HTTP response
 ```
 
-O projeto **já usa DTOs** nas R02 (`ClientDTO`), R03 (`ClientAnalysisDTO`), R05 (`AccountDTO`), R06 (`AccountPatchDTO`) e R09 (`ClientPatchDTO`). A auditoria das R01–R04 manteve os `dicts` simples de R01 e R04, porque não havia ganho concreto em novas classes. **JSON Schema valida a estrutura de entrada; DTOs, quando pertinentes, projetam dados públicos.** Nenhum DTO altera contratos HTTP ou invariantes de persistência. A R10 não necessita DTO porque retorna `204 No Content`.
+O projeto **já usa DTOs** nas R02 (`ClientDTO`), R03 (`ClientAnalysisDTO`), R05 (`AccountDTO`), R06 (`AccountPatchDTO`), R07 (`TransactionDTO`), R08 (`TransactionStatementDTO`) e R09 (`ClientPatchDTO`). A auditoria das R01–R04 manteve os `dicts` simples de R01 e R04, porque não havia ganho concreto em novas classes. **JSON Schema valida a estrutura de entrada; DTOs, quando pertinentes, projetam dados públicos.** Nenhum DTO altera contratos HTTP ou invariantes de persistência. A R10 não necessita DTO porque retorna `204 No Content`.
 
 As dez tabelas do schema v1.1 se distribuem em:
 
@@ -72,23 +73,36 @@ As dez tabelas do schema v1.1 se distribuem em:
 
 A definição física está em [`database/database.sql`](database/database.sql) e no [ERD v1.1](docs/ERD_v1_1_FINAL_BaaS_QITech.md). O projeto ainda não utiliza migrations. Endpoints e entidades de demonstração não pertencem ao contrato bancário nem ao bootstrap principal.
 
-## Preparar o ambiente
+## Quick start
 
-Pré-requisitos: **Docker com Compose** e **Python 3.11 ou superior** para executar os testes localmente.
+Pré-requisito: **Docker com Compose**. Na raiz do repositório, sem criar `.env` e sem executar script preparatório:
 
-Na raiz do repositório:
-
-```powershell
+```bash
 docker compose up -d --build --wait
-docker compose ps
-curl.exe -i http://localhost:3000/health_check
+curl -i http://localhost:3000/health_check
 ```
 
-O último comando deve retornar **HTTP 204**, sem corpo. É um teste de *liveness* HTTP e **não** comprova a disponibilidade do PostgreSQL. Para acompanhar logs, use `docker compose logs -f api`; para parar sem apagar volumes, `docker compose stop`.
+O health check retorna **HTTP 204**. A API fica disponível em `http://localhost:3000` e o token local de demonstração é `default_token`, enviado no header `INTERNAL-TOKEN`.
 
-O Compose principal executa `api`, `db` e, quando configurado na versão utilizada, `mockserver` para simular a integração da R03. Confira os serviços efetivos com `docker compose ps`. O bootstrap `database/database.sql` só é aplicado quando o diretório de dados do PostgreSQL é inicializado vazio; reiniciar/reconstruir o container não reaplica o SQL automaticamente.
+O Compose cria automaticamente o schema de um volume novo a partir de `database/database.sql`, incluindo os índices da R08, e sobe o PostgreSQL e o Analysis Provider necessários. O `.env` é opcional; [`.env.example`](.env.example) documenta os overrides disponíveis.
 
-Portas locais de referência: API `3000`, PostgreSQL principal `5432`, MockServer `1080` (quando ativo). Para personalizar configuração, copie [`.env.example`](.env.example) para `.env`. O `.env` é ignorado pelo Git. Valores padrão de usuário, senha e token são **somente para desenvolvimento local**.
+### Demonstração R01 → R03
+
+Crie um cliente pendente. O provider local aprova por padrão qualquer documento válido que não esteja reservado para o cenário de rejeição:
+
+```bash
+curl -sS -X POST http://localhost:3000/client \
+  -H "INTERNAL-TOKEN: default_token" \
+  -H "Content-Type: application/json" \
+  -d '{"client_type":"INDIVIDUAL","email":"avaliador.approve@example.com","cpf":"52998224725","full_name":"Cliente Avaliador","birth_date":"1990-01-01","timezone":"America/Sao_Paulo"}'
+
+curl -sS -X POST http://localhost:3000/client/CLIENT_KEY/analysis \
+  -H "INTERNAL-TOKEN: default_token"
+```
+
+A segunda resposta muda o cliente de `PENDING` para `ACTIVE`. Para demonstrar rejeição determinística, crie outro cliente com o CPF válido reservado `16899535009`; a análise retorna `REJECTED` com o motivo `Dados cadastrais não atendem aos critérios da análise.`. A decisão continua vindo do provider e a rota de análise continua sem body.
+
+Use `docker compose ps` para consultar os serviços, `docker compose logs -f api` para acompanhar a API e `docker compose down -v --remove-orphans` para remover containers e volumes locais.
 
 ## Rodar os testes
 
@@ -101,27 +115,19 @@ py -3.11 -m venv .venv
 
 Em macOS/Linux, use `python3.11 -m venv .venv` e `.venv/bin/python`.
 
-### PostgreSQL isolado dos testes de schema
+### Testes isolados
 
-**Atenção: a suíte de schema recria o schema `public` do banco de testes.** Nunca use a URL do PostgreSQL principal para esse procedimento.
+O mesmo `docker compose up -d --build --wait` sobe uma API, um PostgreSQL e um MockServer exclusivos do pytest, além de outro PostgreSQL exclusivo dos testes de schema. A suíte HTTP não grava no banco da demonstração; os testes R03 podem resetar seu MockServer sem apagar as expectations manuais; e a suíte de schema pode recriar `public` sem interromper a API de teste.
 
-```powershell
-$env:TEST_DB_PORT = "5433"
-docker compose -f compose.test.yml up -d --build --wait
-$env:TEST_DATABASE_URL = "postgresql+psycopg2://bootcamp:bootcamp@127.0.0.1:5433/bootcamp_test"
-.\.venv\Scripts\python.exe -m pytest tests/integration/database -q
+Depois de instalar as dependências de desenvolvimento, execute sem exports manuais:
+
+```bash
+python -m pytest -q
 ```
 
-A porta **5433 é o exemplo usado nesta configuração**; escolha outra livre se necessário, definindo o mesmo número em `TEST_DB_PORT` e `TEST_DATABASE_URL`. A proteção de testes recusa o banco principal e exige banco de testes dedicado. **Não execute DROP, TRUNCATE ou reset de volumes no banco principal.**
-
-### Testes HTTP e regressão completa
-
-Com API, PostgreSQL principal, PostgreSQL de testes e MockServer necessários à suíte disponíveis:
+No Windows, o equivalente usual é:
 
 ```powershell
-$env:SERVER_LOCALHOST = "127.0.0.1"
-$env:MOCKSERVER_URL = "http://127.0.0.1:1080"
-$env:TEST_DATABASE_URL = "postgresql+psycopg2://bootcamp:bootcamp@127.0.0.1:5433/bootcamp_test"
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
@@ -131,15 +137,9 @@ O teste específico do healthcheck pode ser executado com:
 .\.venv\Scripts\python.exe -m pytest tests/integration/test_healthcheck.py -q
 ```
 
-**Última baseline validada após a integração da R07 e a modularização completa da suíte:** `356 passed in 35.85s`. A contagem mudará quando a R08 for integrada.
+**Última baseline validada nesta preparação do ambiente de avaliação:** `442 passed in 24.16s`, repetida sem limpar os volumes entre as execuções.
 
-Os testes HTTP das rotas de negócio podem gravar **registros exclusivos de teste** no banco principal `bootcamp` por meio da API. Eles não são automaticamente revertidos pelo banco `bootcamp_test`. Use o banco descartável exclusivamente para os testes de schema, como previsto na configuração do projeto; coordene execuções concorrentes com outras pessoas se compartilharem a instância.
-
-Para parar somente o PostgreSQL de testes:
-
-```powershell
-docker compose -f compose.test.yml stop db_test
-```
+Os defaults seguros ficam em `tests/conftest.py` e podem ser sobrescritos por variáveis de ambiente em CI. A proteção existente continua exigindo que `TEST_DATABASE_URL` termine em `_test` e seja diferente do banco usado pela API de teste. O arquivo `compose.test.yml` permanece apenas como compatibilidade para subir isoladamente o banco de schema; o avaliador não precisa conhecê-lo.
 
 ## Contratos e documentação
 

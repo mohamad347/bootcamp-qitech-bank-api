@@ -1,14 +1,16 @@
-name: bootcamp-qitech-bank-api-tests
+name: bootcamp-qitech-bank-api-schema-tests
 
+# Compatibilidade para quem deseja subir apenas o banco dos testes de schema.
+# O fluxo padrão já sobe esse banco isolado pelo docker-compose.yml principal.
 services:
-  db_test:
+  db_schema_test:
     build: ./database
     environment:
       POSTGRES_USER: bootcamp
       POSTGRES_PASSWORD: bootcamp
       POSTGRES_DB: bootcamp_test
     ports:
-      - "127.0.0.1:${TEST_DB_PORT:-5433}:5432"
+      - "127.0.0.1:${SCHEMA_TEST_DB_PORT:-55432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U bootcamp -d bootcamp_test"]
       interval: 3s
