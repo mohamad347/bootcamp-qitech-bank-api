@@ -52,6 +52,53 @@ class TransactionRepository:
         self.session.add(entry)
         return entry
 
+    def list_statement_entries(
+        self,
+        account_id: int,
+        offset: int,
+        limit: int,
+        order_by: str,
+        lower_bound_utc: datetime | None = None,
+        upper_bound_utc: datetime | None = None,
+    ) -> list[TransactionEntry]:
+        query = (
+            self.session.query(TransactionEntry)
+            .options(
+                joinedload(TransactionEntry.transaction)
+                .selectinload(FinancialTransaction.entries)
+                .joinedload(TransactionEntry.account)
+            )
+            .join(
+                FinancialTransaction,
+                FinancialTransaction.id == TransactionEntry.transaction_id,
+            )
+            .filter(TransactionEntry.account_id == account_id)
+        )
+
+        if lower_bound_utc is not None:
+            query = query.filter(
+                FinancialTransaction.created_at >= lower_bound_utc
+            )
+        if upper_bound_utc is not None:
+            query = query.filter(
+                FinancialTransaction.created_at < upper_bound_utc
+            )
+
+        if order_by == "asc":
+            query = query.order_by(
+                FinancialTransaction.created_at.asc(),
+                FinancialTransaction.id.asc(),
+                TransactionEntry.id.asc(),
+            )
+        else:
+            query = query.order_by(
+                FinancialTransaction.created_at.desc(),
+                FinancialTransaction.id.desc(),
+                TransactionEntry.id.asc(),
+            )
+
+        return query.offset(offset).limit(limit).all()
+
     def get_by_key_with_entries(
         self,
         transaction_key: UUID,
