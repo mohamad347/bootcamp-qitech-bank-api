@@ -12,8 +12,10 @@ from errors import (
     AccountNotActive,
     AccountNotFound,
     IdempotencyKeyConflict,
+    InsufficientBalance,
     InvalidSchema,
     InvalidTransactionAmount,
+    SelfTransferNotAllowed,
 )
 from models import AccountStatus, FinancialTransaction, TransactionEntry
 from repositories import AccountRepository, TransactionRepository
@@ -78,7 +80,21 @@ class TransactionController(BaseController):
                     return TransactionDTO.obj_to_response(existing_transaction)
                 raise IdempotencyKeyConflict()
 
-            if amount_cents < 1 or amount_cents > BIGINT_MAX:
+            if (
+                transaction_type == FinancialTransaction.TRANSFER
+                and parsed_account_key == parsed_target_account_key
+            ):
+                raise SelfTransferNotAllowed()
+
+            minimum_amount_cents = (
+                1
+                if transaction_type == FinancialTransaction.DEPOSIT
+                else 1_000
+            )
+            if (
+                amount_cents < minimum_amount_cents
+                or amount_cents > BIGINT_MAX
+            ):
                 raise InvalidTransactionAmount()
 
             if transaction_type == FinancialTransaction.DEPOSIT:
@@ -183,6 +199,10 @@ class TransactionController(BaseController):
             raise InvalidTransactionAmount()
         if target_account.balance_cents > BIGINT_MAX - amount_cents:
             raise InvalidTransactionAmount()
+
+        total_debit_cents = amount_cents + fee_cents
+        if source_account.balance_cents < total_debit_cents:
+            raise InsufficientBalance()
 
         source_after_principal = source_account.balance_cents - amount_cents
         source_after_fee = source_after_principal - fee_cents
