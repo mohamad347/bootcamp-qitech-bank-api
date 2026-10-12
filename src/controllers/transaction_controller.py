@@ -10,7 +10,7 @@ from controllers.transaction_hash import (
     build_deposit_request_hash,
     build_transfer_request_hash,
 )
-from dtos import TransactionDTO
+from dtos import TransactionDTO, TransactionStatementDTO
 from errors import (
     AccountNotActive,
     AccountNotFound,
@@ -62,7 +62,10 @@ class TransactionController(BaseController):
         has_next = len(entries) > limit
 
         return {
-            "data": [],
+            "data": [
+                TransactionStatementDTO.obj_to_response(entry)
+                for entry in entries[:limit]
+            ],
             "next_page": page + 1 if has_next else None,
         }
 

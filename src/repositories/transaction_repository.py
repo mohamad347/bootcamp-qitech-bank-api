@@ -61,6 +61,11 @@ class TransactionRepository:
     ) -> list[TransactionEntry]:
         query = (
             self.session.query(TransactionEntry)
+            .options(
+                joinedload(TransactionEntry.transaction)
+                .selectinload(FinancialTransaction.entries)
+                .joinedload(TransactionEntry.account)
+            )
             .join(
                 FinancialTransaction,
                 FinancialTransaction.id == TransactionEntry.transaction_id,
