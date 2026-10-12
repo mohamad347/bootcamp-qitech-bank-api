@@ -7,3 +7,6 @@ from models.client import Client
 from models.individual_client import IndividualClient
 from models.company_client import CompanyClient
 from models.client_status_event import ClientStatusEvent
+from models.account_status import AccountStatus
+from models.account import Account
+from models.account_status_event import AccountStatusEvent
