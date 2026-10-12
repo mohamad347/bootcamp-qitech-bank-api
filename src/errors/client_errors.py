@@ -33,6 +33,24 @@ class InvalidClientStatus(QIException):
         )
 
 
+class ClientLifecycleRequiresAccount(QIException):
+    code = "CLI0009"
+
+    def __init__(self) -> None:
+        super().__init__(
+            title="Client lifecycle requires account coordination",
+            code=self.code,
+            http_status=409,
+            description=(
+                "The client has an account; lifecycle changes must use the account."
+            ),
+            translation=(
+                "O cliente possui uma conta; a alteração de status deve ser feita "
+                "pela conta."
+            ),
+        )
+
+
 class DuplicateClientEmail(QIException):
     code = "CLI0003"
 

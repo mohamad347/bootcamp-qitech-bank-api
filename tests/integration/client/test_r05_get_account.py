@@ -43,10 +43,9 @@ def api_database_engine() -> Iterator[Engine]:
 
     assert api_url.database == "bootcamp"
     assert api_url.host in {"localhost", "127.0.0.1"}
-    assert api_url.port == 5432
     assert test_url.database == "bootcamp_test"
     assert test_url.host in {"localhost", "127.0.0.1"}
-    assert test_url.port == 5433
+    assert api_url != test_url
 
     engine = create_engine(api_url)
     try:

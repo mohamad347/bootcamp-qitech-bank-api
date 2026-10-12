@@ -6,12 +6,16 @@ from psycopg2.errors import UniqueViolation
 from sqlalchemy.exc import IntegrityError
 
 from controllers.base_controller import BaseController
+from dtos import ClientPatchDTO
 from errors import (
+    ClientLifecycleRequiresAccount,
     ClientNotFound,
     DuplicateClientCPF,
     DuplicateClientCNPJ,
     DuplicateClientEmail,
     InvalidClientDocument,
+    InvalidClientStatus,
+    InternalError,
     InvalidSchema,
     UnderageClient,
     UnsupportedClientTimezone,
@@ -200,6 +204,65 @@ class ClientController(BaseController):
             )
 
         return response_data
+
+    def update_status(self, client_key: str, payload: dict) -> dict:
+        try:
+            parsed_client_key = UUID(client_key)
+        except (AttributeError, TypeError, ValueError):
+            raise InvalidSchema("client_key must be a valid UUID") from None
+
+        try:
+            try:
+                request_data = ClientPatchDTO.from_payload(payload)
+            except ValueError as error:
+                raise InvalidSchema(str(error)) from None
+
+            client = self.client_repository.get_by_key_for_update(parsed_client_key)
+            if client is None:
+                raise ClientNotFound(client_key)
+
+            current_status = self.client_repository.get_status_by_id(
+                client.status_id
+            )
+            if current_status is None:
+                raise InternalError()
+
+            allowed_transitions = {
+                ClientStatus.REJECTED: ClientStatus.PENDING,
+                ClientStatus.ACTIVE: ClientStatus.INACTIVE,
+                ClientStatus.INACTIVE: ClientStatus.ACTIVE,
+            }
+            target_status_name = request_data.status
+            required_target = allowed_transitions.get(current_status.enumerator)
+            if required_target != target_status_name:
+                raise InvalidClientStatus(
+                    current_status=current_status.enumerator,
+                    required_status=required_target or "a permitted transition",
+                )
+
+            if (
+                current_status.enumerator
+                in {ClientStatus.ACTIVE, ClientStatus.INACTIVE}
+                and self.client_repository.has_account(client.id)
+            ):
+                raise ClientLifecycleRequiresAccount()
+
+            target_status = self.client_repository.get_status(target_status_name)
+            self.client_repository.apply_status_change(
+                client=client,
+                from_status=current_status,
+                to_status=target_status,
+                reason=request_data.reason,
+            )
+            response = ClientPatchDTO.to_response(
+                client.client_key,
+                target_status.enumerator,
+            )
+            self.session.commit()
+            return response
+        except Exception:
+            self.session.rollback()
+            raise
 
     @staticmethod
     def _as_utc_isoformat(value: datetime) -> str:
